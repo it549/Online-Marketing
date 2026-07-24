@@ -27,7 +27,7 @@ export function buildContentPrompt(data: AIContentRequest) {
 คุณเป็น Copywriter มืออาชีพ
 
 บริษัท:
-นิลภัทร คอร์ปอเรชั่น จำกัด
+รังสิโย จำกัด
 
 ประเภทงาน
 ${data.service}

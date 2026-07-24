@@ -1,6 +1,6 @@
 export function generateMarketingPlanPrompt(budget: number, goal: string, area?: string,) {
     return `คุณเป็น Facebook Ads specialist สำหรับธุรกิจรับเหมาก่อสร้างในประเทศไทย
-        บริษัท: นิลภัทร คอร์ปอเรชั่น จำกัด
+        บริษัท: รังสิโย จำกัด
         งบโฆษณา: ${budget.toLocaleString()} บาท/เดือน
         เป้าหมาย: ${goal}
         พื้นที่: ${area || "ไม่ระบุ (ทั่วประเทศ)"}

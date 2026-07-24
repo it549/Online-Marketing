@@ -5,7 +5,7 @@ import "./globals.css";
 const geist = Geist({ variable: "--font-geist-sans", subsets: ["latin"] });
 
 export const metadata: Metadata = {
-    title: "Nilaphatra Marketing AI",
+    title: "Rungsiyo Marketing AI",
     description: "AI Marketing Dashboard สำหรับ Facebook & TikTok",
 };
 
