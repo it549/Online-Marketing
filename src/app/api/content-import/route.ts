@@ -2,10 +2,14 @@ import { NextResponse } from "next/server";
 import { importContentCsv } from "@/server/core/content-import/content-import.service";
 import { saveContentImportResult } from "@/server/core/content-import/content-import-database.service";
 import { ContentPlatformCode } from "@/server/core/content-import/content-import.types";
+import { requireAdmin } from "@/server/core/auth/api-guard";
 
 const SUPPORTED_PLATFORM_CODES: ContentPlatformCode[] = ["FACEBOOK"];
 
 export async function POST(request: Request) {
+    const guard = requireAdmin(request);
+    if (guard.response) return guard.response;
+
     try {
         const formData = await request.formData();
         const file = formData.get("file");

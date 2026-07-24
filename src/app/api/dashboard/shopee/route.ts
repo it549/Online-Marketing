@@ -1,10 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getShopeeDashboardData } from "@/server/modules/shopee/shopeeDashboard.service";
 import { ShopeePeriodGranularity } from "@/types/shopeeDashboard";
+import { requireAdmin } from "@/server/core/auth/api-guard";
 
 const VALID_GRANULARITIES: ShopeePeriodGranularity[] = ["week", "month", "quarter"];
 
 export async function GET(request: NextRequest) {
+    const guard = requireAdmin(request);
+    if (guard.response) return guard.response;
+
     try {
         const params = request.nextUrl.searchParams;
         const periodParam = params.get("period");

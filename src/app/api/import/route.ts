@@ -2,8 +2,12 @@ import { NextResponse, } from "next/server";
 import { importCsv, } from "@/server/core/import/import.service";
 import { saveImportResult, } from "@/server/core/import/import-database.service";
 import { Platform, } from "@/server/core/import/import.types";
+import { requireAdmin } from "@/server/core/auth/api-guard";
 
 export async function POST(request: Request,) {
+    const guard = requireAdmin(request);
+    if (guard.response) return guard.response;
+
     try {
         const formData = await request.formData();
         const file = formData.get("file");
