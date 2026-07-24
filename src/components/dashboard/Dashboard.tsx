@@ -8,18 +8,25 @@ import DashboardError from "./DashboardError";
 import PlatformSelector from "./PlatformSelector";
 import MetricCards from "./MetricCards";
 import DashboardTable from "./DashboardTable";
+import ImportCsvButton from "./ImportCsvButton";
+import DashboardEmptyState from "./DashboardEmptyState";
 
 import { useDashboard } from "@/hooks/useDashboard";
 import { Platform } from "@/types/platform";
+import { IMPORT_CONFIG_BY_PLATFORM } from "@/constants/importConfig";
 
 export default function Dashboard() {
     const [platform, setPlatform] = useState<Platform>("facebook");
-    const { data, loading, error } = useDashboard(platform);
+    const { data, loading, error, refetch } = useDashboard(platform);
+    const importConfig = IMPORT_CONFIG_BY_PLATFORM[platform];
 
-    console.log("Dashboard Data:", data);
     return (
         <div className="space-y-6">
-            <PlatformSelector value={platform} onChange={setPlatform} />
+            <div className="flex items-center justify-between">
+                <PlatformSelector value={platform} onChange={setPlatform} />
+
+                <ImportCsvButton onImported={refetch} endpoint={importConfig.endpoint} platforms={importConfig.platforms} />
+            </div>
 
             {loading && <DashboardLoading />}
 
@@ -27,11 +34,17 @@ export default function Dashboard() {
 
             {data && (
                 <>
-                    <DashboardHeader title={data.title} />
+                    <DashboardHeader title={data.title} subtitle={data.subtitle} />
 
-                    <MetricCards metrics={data.metrics} />
+                    {data.hasData === false ? (
+                        <DashboardEmptyState onImported={refetch} endpoint={importConfig.endpoint} platforms={importConfig.platforms} />
+                    ) : (
+                        <>
+                            <MetricCards metrics={data.metrics} />
 
-                    <DashboardTable table={data.table} />
+                            <DashboardTable table={data.table} />
+                        </>
+                    )}
                 </>
             )}
         </div>

@@ -1,6 +1,7 @@
 import { Platform } from "@/types/platform";
 import { getFacebookDashboard } from "../facebook/facebook.service";
 import { getTikTokDashboard } from "../tiktok/tiktok.service";
+import { getShopeeDashboard } from "../shopee/shopee.service";
 import { mapDashboard } from "./dashboard.mapper";
 
 export async function getDashboardService(platform: Platform) {
@@ -13,6 +14,10 @@ export async function getDashboardService(platform: Platform) {
 
         case "tiktok":
             dashboard = await getTikTokDashboard();
+            break;
+
+        case "shopee":
+            dashboard = await getShopeeDashboard();
             break;
 
         default:

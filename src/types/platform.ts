@@ -1,4 +1,4 @@
-export type Platform = "facebook" | "tiktok";
+export type Platform = "facebook" | "tiktok" | "shopee";
 
 export interface PlatformConfig {
     id: Platform;

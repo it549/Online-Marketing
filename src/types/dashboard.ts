@@ -5,6 +5,8 @@ import { Platform } from "./platform";
 export interface DashboardData {
     platform: Platform;
     title: string;
+    subtitle?: string;
+    hasData?: boolean;
     metrics: DashboardMetric[];
     table: DashboardTable;
 }
