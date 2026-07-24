@@ -106,3 +106,82 @@ enum ImportStatus {
   COMPLETED
   FAILED
 }
+
+// --- Content (organic posts) domain ---------------------------------------
+// Separate from Platform/Campaign/CampaignReportMetric above, which model
+// periodic AD CAMPAIGN reports (spend/revenue per date range, additive across
+// imports). Content posts are CUMULATIVE LIFETIME snapshots per post -- every
+// export re-states each post's all-time totals, so re-importing must
+// overwrite (upsert) a post's single metric row, never sum across imports.
+
+model ContentPlatform {
+  id         BigInt             @id @default(autoincrement())
+  code       String             @unique // "FACEBOOK" (future: "TIKTOK", "INSTAGRAM")
+  name       String
+  isActive   Boolean            @default(true) @map("is_active")
+  createdAt  DateTime           @default(now()) @map("created_at")
+  updatedAt  DateTime           @updatedAt @map("updated_at")
+  posts      ContentPost[]
+  importJobs ContentImportJob[]
+
+  @@map("content_platforms")
+}
+
+model ContentImportJob {
+  id             BigInt          @id @default(autoincrement())
+  platformId     BigInt          @map("platform_id")
+  filename       String
+  rangeStartDate DateTime?       @map("range_start_date") @db.Date
+  rangeEndDate   DateTime?       @map("range_end_date") @db.Date
+  totalRecords   Int             @map("total_records")
+  status         ImportStatus
+  errorMessage   String?         @map("error_message") @db.Text
+  importedAt     DateTime?       @map("imported_at")
+  createdAt      DateTime        @default(now()) @map("created_at")
+  updatedAt      DateTime        @updatedAt @map("updated_at")
+  platform       ContentPlatform @relation(fields: [platformId], references: [id])
+  posts          ContentPost[]
+
+  @@map("content_import_jobs")
+}
+
+model ContentPost {
+  id              BigInt             @id @default(autoincrement())
+  platformId      BigInt             @map("platform_id")
+  externalPostId  String             @map("external_post_id")
+  pageExternalId  String?            @map("page_external_id")
+  pageName        String?            @map("page_name")
+  title           String?            @db.Text
+  postType        String?            @map("post_type")
+  permalink       String?            @db.Text
+  publishedAt     DateTime?          @map("published_at")
+  durationSeconds Int?               @map("duration_seconds")
+  lastImportJobId BigInt?            @map("last_import_job_id")
+  createdAt       DateTime           @default(now()) @map("created_at")
+  updatedAt       DateTime           @updatedAt @map("updated_at")
+  platform        ContentPlatform    @relation(fields: [platformId], references: [id])
+  lastImportJob   ContentImportJob?  @relation(fields: [lastImportJobId], references: [id])
+  metric          ContentPostMetric?
+
+  @@unique([platformId, externalPostId])
+  @@map("content_posts")
+}
+
+model ContentPostMetric {
+  id               BigInt      @id @default(autoincrement())
+  postId           BigInt      @unique @map("post_id")
+  avgSecondsViewed Decimal?    @map("avg_seconds_viewed") @db.Decimal(10, 3)
+  reach            Int?
+  impressions      Int?
+  reactions        Int?
+  comments         Int?
+  shares           Int?
+  saves            Int?
+  newFollowers     Int?        @map("new_followers")
+  viewers          Int?
+  views            Int?
+  updatedAt        DateTime    @updatedAt @map("updated_at")
+  post             ContentPost @relation(fields: [postId], references: [id])
+
+  @@map("content_post_metrics")
+}

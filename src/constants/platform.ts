@@ -21,4 +21,10 @@ export const PLATFORMS: {
         name: "Shopee",
         icon: "/icons/shopee.svg",
     },
+
+    {
+        id: "facebook_content",
+        name: "Facebook Content",
+        icon: "/icons/facebook.svg",
+    },
 ];

@@ -9,4 +9,8 @@ export interface DashboardData {
     hasData?: boolean;
     metrics: DashboardMetric[];
     table: DashboardTable;
+    secondaryTable?: {
+        title: string;
+        table: DashboardTable;
+    };
 }

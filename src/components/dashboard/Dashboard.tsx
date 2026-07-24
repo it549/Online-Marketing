@@ -43,6 +43,10 @@ export default function Dashboard() {
                             <MetricCards metrics={data.metrics} />
 
                             <DashboardTable table={data.table} />
+
+                            {data.secondaryTable && (
+                                <DashboardTable table={data.secondaryTable.table} title={data.secondaryTable.title} />
+                            )}
                         </>
                     )}
                 </>
