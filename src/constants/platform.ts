@@ -15,4 +15,10 @@ export const PLATFORMS: {
         name: "TikTok",
         icon: "/icons/tiktok.svg",
     },
+
+    {
+        id: "shopee",
+        name: "Shopee",
+        icon: "/icons/shopee.svg",
+    },
 ];

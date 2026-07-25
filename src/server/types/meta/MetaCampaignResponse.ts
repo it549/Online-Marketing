@@ -19,9 +19,13 @@ export interface MetaInsights {
 
 export interface MetaInsight {
     spend: string;
+    impressions?: string;
+    reach?: string;
+    clicks?: string;
     ctr: string;
     actions: MetaAction[];
     cost_per_action_type: MetaAction[];
+    action_values?: MetaAction[];
 }
 
 export interface MetaAction {

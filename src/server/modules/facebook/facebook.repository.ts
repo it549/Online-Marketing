@@ -7,7 +7,7 @@ export async function getFacebookCampaignRepository(params: GetCampaignsParams):
 
         url.searchParams.set(
             "fields",
-            `name,status,insights.date_preset(${params.datePreset}){spend,actions,ctr,cost_per_action_type}`,
+            `name,status,insights.date_preset(${params.datePreset}){spend,impressions,reach,clicks,ctr,actions,cost_per_action_type,action_values}`,
         );
 
         url.searchParams.set("access_token", params.accessToken);
@@ -25,12 +25,21 @@ export async function getFacebookCampaignRepository(params: GetCampaignsParams):
                 body: errorText,
             });
 
-            throw new Error(errorText);
+            throw new Error(extractGraphErrorMessage(errorText));
         }
 
         return await response.json() as MetaCampaignResponse;
     } catch (error) {
         console.error("Repository Error:", error);
         throw error;
+    }
+}
+
+function extractGraphErrorMessage(errorText: string): string {
+    try {
+        const parsed = JSON.parse(errorText) as { error?: { message?: string } };
+        return parsed.error?.message ?? errorText;
+    } catch {
+        return errorText;
     }
 }

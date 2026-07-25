@@ -2,38 +2,25 @@
 
 import { useState } from "react";
 
-import DashboardHeader from "./DashboardHeader";
-import DashboardLoading from "./DashboardLoading";
-import DashboardError from "./DashboardError";
 import PlatformSelector from "./PlatformSelector";
-import MetricCards from "./MetricCards";
-import DashboardTable from "./DashboardTable";
+import GenericAdsDashboard from "./GenericAdsDashboard";
+import FacebookDashboard from "./FacebookDashboard";
+import ShopeeDashboard from "./ShopeeDashboard";
 
-import { useDashboard } from "@/hooks/useDashboard";
 import { Platform } from "@/types/platform";
 
 export default function Dashboard() {
     const [platform, setPlatform] = useState<Platform>("facebook");
-    const { data, loading, error } = useDashboard(platform);
 
-    console.log("Dashboard Data:", data);
     return (
         <div className="space-y-6">
             <PlatformSelector value={platform} onChange={setPlatform} />
 
-            {loading && <DashboardLoading />}
+            {platform === "shopee" && <ShopeeDashboard />}
 
-            {error && <DashboardError message={error} />}
+            {platform === "facebook" && <FacebookDashboard />}
 
-            {data && (
-                <>
-                    <DashboardHeader title={data.title} />
-
-                    <MetricCards metrics={data.metrics} />
-
-                    <DashboardTable table={data.table} />
-                </>
-            )}
+            {platform === "tiktok" && <GenericAdsDashboard platform={platform} />}
         </div>
     );
 }
