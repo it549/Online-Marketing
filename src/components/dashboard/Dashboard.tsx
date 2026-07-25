@@ -4,7 +4,7 @@ import { useState } from "react";
 
 import PlatformSelector from "./PlatformSelector";
 import GenericAdsDashboard from "./GenericAdsDashboard";
-import FacebookContentDashboard from "./FacebookContentDashboard";
+import FacebookDashboard from "./FacebookDashboard";
 import ShopeeDashboard from "./ShopeeDashboard";
 
 import { Platform } from "@/types/platform";
@@ -18,9 +18,9 @@ export default function Dashboard() {
 
             {platform === "shopee" && <ShopeeDashboard />}
 
-            {platform === "facebook_content" && <FacebookContentDashboard />}
+            {platform === "facebook" && <FacebookDashboard />}
 
-            {(platform === "facebook" || platform === "tiktok") && <GenericAdsDashboard platform={platform} />}
+            {platform === "tiktok" && <GenericAdsDashboard platform={platform} />}
         </div>
     );
 }

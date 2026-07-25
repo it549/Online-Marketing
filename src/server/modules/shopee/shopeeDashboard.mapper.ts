@@ -1,5 +1,5 @@
 import {
-    ShopeeAvailableFilters, ShopeeDashboardBucket, ShopeeDashboardResponse, ShopeeDashboardSummary, ShopeePeriodGranularity,
+    ShopeeAvailableFilters, ShopeeDashboardBucket, ShopeeDashboardResponse, ShopeeDashboardSummary, ShopeeImportBatch, ShopeePeriodGranularity,
 } from "@/types/shopeeDashboard";
 import { ShopeeBucketAccumulator } from "./shopeeDashboard.bucket";
 
@@ -9,7 +9,20 @@ interface RawShopeeDashboard {
     buckets: ShopeeBucketAccumulator[];
 }
 
-export function mapShopeeDashboard(raw: RawShopeeDashboard, availableFilters: ShopeeAvailableFilters): ShopeeDashboardResponse {
+interface RawShopeeImportJob {
+    id: bigint;
+    filename: string;
+    importedAt: Date | null;
+    totalRecords: number;
+    reportStartDate: Date;
+    reportEndDate: Date;
+}
+
+export function mapShopeeDashboard(
+    raw: RawShopeeDashboard,
+    availableFilters: ShopeeAvailableFilters,
+    importJobs: RawShopeeImportJob[] = [],
+): ShopeeDashboardResponse {
     const buckets: ShopeeDashboardBucket[] = raw.buckets.map((bucket) => ({
         periodLabel: formatBucketLabel(raw.granularity, bucket.periodStart, bucket.periodEnd),
         periodStart: bucket.periodStart.toISOString(),
@@ -39,13 +52,28 @@ export function mapShopeeDashboard(raw: RawShopeeDashboard, availableFilters: Sh
     const totalImpressions = raw.buckets.reduce((sum, b) => sum + b.impressions, 0);
     summary.ctr = totalImpressions > 0 ? (totalClicks / totalImpressions) * 100 : null;
 
+    const importBatches: ShopeeImportBatch[] = importJobs.map((job) => ({
+        id: job.id.toString(),
+        filename: job.filename,
+        importedAt: job.importedAt ? job.importedAt.toISOString() : null,
+        totalRecords: job.totalRecords,
+        periodLabel: formatPeriod(job.reportStartDate, job.reportEndDate),
+    }));
+
     return {
         hasData: raw.hasData,
         granularity: raw.granularity,
         summary,
         buckets,
         availableFilters,
+        importBatches,
     };
+}
+
+function formatPeriod(start: Date, end: Date): string {
+    const startLabel = start.toLocaleDateString("th-TH", { year: "numeric", month: "short", day: "numeric" });
+    const endLabel = end.toLocaleDateString("th-TH", { year: "numeric", month: "short", day: "numeric" });
+    return `${startLabel} - ${endLabel}`;
 }
 
 function formatBucketLabel(granularity: ShopeePeriodGranularity, start: Date, end: Date): string {

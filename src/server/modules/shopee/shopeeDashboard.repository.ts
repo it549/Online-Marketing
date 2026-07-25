@@ -56,3 +56,18 @@ export async function getShopeeAvailableFiltersRepository() {
         select: { productId: true, campaignName: true, campaignStatus: true },
     });
 }
+
+export async function getShopeeImportJobsRepository() {
+    const platform = await prisma.platform.findUnique({
+        where: { code: SHOPEE_PLATFORM_CODE },
+    });
+
+    if (!platform) {
+        return [];
+    }
+
+    return prisma.importJob.findMany({
+        where: { platformId: platform.id, status: "COMPLETED" },
+        orderBy: { importedAt: "desc" },
+    });
+}

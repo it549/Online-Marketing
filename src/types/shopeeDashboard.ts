@@ -40,10 +40,19 @@ export interface ShopeeAvailableFilters {
     statuses: string[];
 }
 
+export interface ShopeeImportBatch {
+    id: string;
+    filename: string;
+    importedAt: string | null;
+    totalRecords: number;
+    periodLabel: string | null;
+}
+
 export interface ShopeeDashboardResponse {
     hasData: boolean;
     granularity: ShopeePeriodGranularity;
     summary: ShopeeDashboardSummary;
     buckets: ShopeeDashboardBucket[];
     availableFilters: ShopeeAvailableFilters;
+    importBatches: ShopeeImportBatch[];
 }

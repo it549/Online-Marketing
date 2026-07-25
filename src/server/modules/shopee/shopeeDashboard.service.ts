@@ -2,7 +2,7 @@ import { toNumber } from "@/utils/decimal";
 import {
     ShopeeAvailableFilters, ShopeeDashboardFilters, ShopeeDashboardResponse, ShopeePeriodGranularity,
 } from "@/types/shopeeDashboard";
-import { getShopeeAvailableFiltersRepository, getShopeeCampaignsRepository } from "./shopeeDashboard.repository";
+import { getShopeeAvailableFiltersRepository, getShopeeCampaignsRepository, getShopeeImportJobsRepository } from "./shopeeDashboard.repository";
 import { getBucketKey, getBucketRange, ShopeeBucketAccumulator } from "./shopeeDashboard.bucket";
 import { mapShopeeDashboard } from "./shopeeDashboard.mapper";
 
@@ -13,7 +13,7 @@ export async function getShopeeDashboardData(
     const dateFrom = filters.dateFrom ? new Date(filters.dateFrom) : undefined;
     const dateTo = filters.dateTo ? new Date(filters.dateTo) : undefined;
 
-    const [repoResult, availableCampaigns] = await Promise.all([
+    const [repoResult, availableCampaigns, importJobs] = await Promise.all([
         getShopeeCampaignsRepository({
             productId: filters.productId,
             campaignName: filters.campaignName,
@@ -22,13 +22,14 @@ export async function getShopeeDashboardData(
             dateTo,
         }),
         getShopeeAvailableFiltersRepository(),
+        getShopeeImportJobsRepository(),
     ]);
 
     const availableFilters = buildAvailableFilters(availableCampaigns);
     const hasData = availableCampaigns.length > 0;
 
     if (!repoResult) {
-        return mapShopeeDashboard({ hasData: false, granularity, buckets: [] }, availableFilters);
+        return mapShopeeDashboard({ hasData: false, granularity, buckets: [] }, availableFilters, importJobs);
     }
 
     const buckets = new Map<string, ShopeeBucketAccumulator>();
@@ -60,7 +61,7 @@ export async function getShopeeDashboardData(
 
     const sortedBuckets = Array.from(buckets.values()).sort((a, b) => a.periodStart.getTime() - b.periodStart.getTime());
 
-    return mapShopeeDashboard({ hasData, granularity, buckets: sortedBuckets }, availableFilters);
+    return mapShopeeDashboard({ hasData, granularity, buckets: sortedBuckets }, availableFilters, importJobs);
 }
 
 function buildAvailableFilters(campaigns: { productId: string | null; campaignName: string; campaignStatus: string }[]): ShopeeAvailableFilters {
