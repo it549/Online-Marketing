@@ -35,5 +35,9 @@ export function proxy(request: NextRequest) {
 }
 
 export const config = {
-    matcher: ["/((?!_next/static|_next/image|favicon.ico).*)"],
+    // Static assets (icons/logos served from /public) must stay reachable without a
+    // session -- Next's image optimizer fetches them internally to resize/transform,
+    // and that internal fetch carries no session cookie, so gating them here made
+    // next/image fail for any raster (non-SVG) image with "not a valid image".
+    matcher: ["/((?!_next/static|_next/image|favicon.ico|icons/).*)"],
 };

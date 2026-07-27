@@ -11,7 +11,7 @@ export function mapTikTokDashboard(raw: TikTokCampaignResponse): DashboardData {
                 label: "ยอดใช้จ่าย",
                 value: `฿${raw.summary.spend.toLocaleString()}`,
                 subtitle: "30 วันล่าสุด",
-                color: "text-cyan-400",
+                color: "text-cyan-600",
             },
 
             {
@@ -19,7 +19,7 @@ export function mapTikTokDashboard(raw: TikTokCampaignResponse): DashboardData {
                 label: "Leads",
                 value: raw.summary.leads.toString(),
                 subtitle: "30 วันล่าสุด",
-                color: "text-green-400",
+                color: "text-green-600",
             },
 
             {
@@ -27,7 +27,7 @@ export function mapTikTokDashboard(raw: TikTokCampaignResponse): DashboardData {
                 label: "Cost / Lead",
                 value: `฿${raw.summary.cpl}`,
                 subtitle: "Average",
-                color: "text-yellow-400",
+                color: "text-sky-600",
             },
 
             {
@@ -35,7 +35,7 @@ export function mapTikTokDashboard(raw: TikTokCampaignResponse): DashboardData {
                 label: "CTR",
                 value: `${raw.summary.ctr}%`,
                 subtitle: "Click Through Rate",
-                color: "text-pink-400",
+                color: "text-pink-600",
             },
         ],
 

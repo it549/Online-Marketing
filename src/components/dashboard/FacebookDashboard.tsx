@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import PlatformPageHeader from "./PlatformPageHeader";
 import PlatformSubTabs, { PlatformSubTab } from "./PlatformSubTabs";
 import FacebookApiPerformance from "./facebook/FacebookApiPerformance";
 import FacebookImportedAnalytics from "./facebook/FacebookImportedAnalytics";
@@ -11,6 +12,8 @@ export default function FacebookDashboard() {
 
     return (
         <div className="space-y-6">
+            <PlatformPageHeader name="Facebook" icon="/icons/facebook.svg" description="โฆษณาและคอนเทนต์บนเพจ Facebook" />
+
             <PlatformSubTabs value={tab} onChange={setTab} />
 
             {tab === "api" && <FacebookApiPerformance />}

@@ -50,7 +50,7 @@ export default function ShopeeImportedAnalytics() {
                     <ShopeeFilters filters={filters} availableFilters={data.availableFilters} onChange={setFilters} />
 
                     {data.buckets.length === 0 ? (
-                        <div className="rounded-xl border border-dashed border-slate-700 bg-slate-800/50 px-6 py-12 text-center text-slate-400">
+                        <div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50 px-6 py-12 text-center text-slate-500">
                             ไม่พบข้อมูลตรงกับตัวกรองที่เลือก
                         </div>
                     ) : (
@@ -99,7 +99,7 @@ function buildSummaryMetrics(summary: {
             label: "ยอดใช้จ่าย",
             value: `฿${summary.spend.toLocaleString()}`,
             subtitle: "ตามตัวกรองที่เลือก",
-            color: "text-blue-400",
+            color: "text-blue-600",
         },
 
         {
@@ -107,7 +107,7 @@ function buildSummaryMetrics(summary: {
             label: "ยอดขาย",
             value: `฿${summary.revenue.toLocaleString()}`,
             subtitle: "ตามตัวกรองที่เลือก",
-            color: "text-green-400",
+            color: "text-green-600",
         },
 
         {
@@ -115,7 +115,7 @@ function buildSummaryMetrics(summary: {
             label: summary.profit >= 0 ? "กำไร" : "ขาดทุน",
             value: `฿${Math.abs(summary.profit).toLocaleString()}`,
             subtitle: "ยอดขาย − ค่าโฆษณา",
-            color: summary.profit >= 0 ? "text-emerald-400" : "text-red-400",
+            color: summary.profit >= 0 ? "text-emerald-600" : "text-red-600",
         },
 
         {
@@ -123,7 +123,7 @@ function buildSummaryMetrics(summary: {
             label: "ROAS",
             value: summary.roas !== null ? summary.roas.toFixed(2) : "-",
             subtitle: "ยอดขาย / ค่าโฆษณา",
-            color: "text-purple-400",
+            color: "text-purple-600",
         },
 
         {
@@ -131,7 +131,7 @@ function buildSummaryMetrics(summary: {
             label: "คำสั่งซื้อ",
             value: summary.orders.toLocaleString(),
             subtitle: "ตามตัวกรองที่เลือก",
-            color: "text-yellow-400",
+            color: "text-indigo-600",
         },
 
         {
@@ -139,7 +139,7 @@ function buildSummaryMetrics(summary: {
             label: "CTR",
             value: summary.ctr !== null ? `${summary.ctr.toFixed(2)}%` : "-",
             subtitle: "Click Through Rate",
-            color: "text-cyan-400",
+            color: "text-cyan-600",
         },
     ];
 }

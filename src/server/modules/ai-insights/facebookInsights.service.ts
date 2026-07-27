@@ -1,13 +1,20 @@
 import { generateLlmText } from "@/server/shared/llm/groq.client";
 import { getFacebookApiPerformance } from "@/server/modules/facebook/facebookApiPerformance.service";
 import { getFacebookContentAnalytics } from "@/server/modules/facebook-content/facebookContentAnalytics.service";
+import { getCompanyById } from "@/server/modules/company/company.repository";
 import { AiInsightsResponse, AiInsightsSource } from "@/types/aiInsights";
 import { buildFacebookInsightsPrompt } from "./facebookInsights.prompt";
 
-export async function generateFacebookInsights(): Promise<AiInsightsResponse> {
+export async function generateFacebookInsights(companyId: bigint): Promise<AiInsightsResponse> {
+    const company = await getCompanyById(companyId);
+
+    const facebookCredentials = company?.facebookAdAccountId && company?.facebookAccessToken
+        ? { adAccountId: company.facebookAdAccountId, accessToken: company.facebookAccessToken }
+        : null;
+
     const [apiPerformance, contentAnalytics] = await Promise.all([
-        getFacebookApiPerformance(),
-        getFacebookContentAnalytics(),
+        getFacebookApiPerformance(facebookCredentials),
+        getFacebookContentAnalytics(companyId),
     ]);
 
     const sources: AiInsightsSource[] = [];

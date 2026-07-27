@@ -18,7 +18,7 @@ export default function ImportCsvButton({ onImported, endpoint, platforms }: Pro
         <>
             <button
                 onClick={() => setOpen(true)}
-                className="flex items-center gap-2 rounded-xl border border-slate-700 bg-slate-900 px-4 py-2 text-sm font-medium text-white transition-all hover:bg-slate-800"
+                className="flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700 shadow-sm transition-colors hover:bg-slate-50 hover:border-slate-300"
             >
                 📥 นำเข้าไฟล์ CSV
             </button>

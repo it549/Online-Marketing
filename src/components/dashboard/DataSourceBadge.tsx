@@ -28,16 +28,16 @@ export default function DataSourceBadge(props: Props) {
         const synced = formatDateTime(props.lastSyncedAt);
 
         return (
-            <div className="flex flex-wrap items-center gap-2 rounded-lg border border-blue-800/60 bg-blue-950/30 px-3 py-2 text-xs text-blue-300">
-                <span className="rounded-full bg-blue-500/20 px-2 py-0.5 font-semibold text-blue-300">แหล่งข้อมูล: API</span>
+            <div className="flex flex-wrap items-center gap-2 rounded-xl border border-blue-200 bg-blue-50 px-3 py-2 text-xs text-blue-700">
+                <span className="rounded-full bg-blue-100 px-2 py-0.5 font-semibold text-blue-700">แหล่งข้อมูล: API</span>
 
                 {props.connected ? (
                     <>
                         {synced && <span>อัปเดตล่าสุด {synced}</span>}
-                        {props.dateRangeLabel && <span className="text-blue-400/70">· {props.dateRangeLabel}</span>}
+                        {props.dateRangeLabel && <span className="text-blue-500">· {props.dateRangeLabel}</span>}
                     </>
                 ) : (
-                    <span className="text-amber-400">ยังไม่ได้เชื่อมต่อ / เชื่อมต่อไม่สำเร็จ</span>
+                    <span className="text-amber-600">ยังไม่ได้เชื่อมต่อ / เชื่อมต่อไม่สำเร็จ</span>
                 )}
             </div>
         );
@@ -46,12 +46,12 @@ export default function DataSourceBadge(props: Props) {
     const imported = formatDateTime(props.latestImportedAt);
 
     return (
-        <div className="flex flex-wrap items-center gap-2 rounded-lg border border-emerald-800/60 bg-emerald-950/30 px-3 py-2 text-xs text-emerald-300">
-            <span className="rounded-full bg-emerald-500/20 px-2 py-0.5 font-semibold text-emerald-300">แหล่งข้อมูล: ไฟล์นำเข้า (CSV)</span>
+        <div className="flex flex-wrap items-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs text-emerald-700">
+            <span className="rounded-full bg-emerald-100 px-2 py-0.5 font-semibold text-emerald-700">แหล่งข้อมูล: ไฟล์นำเข้า (CSV)</span>
 
             <span>{props.fileCount} ไฟล์ที่นำเข้าแล้ว</span>
 
-            {imported && <span className="text-emerald-400/70">· ล่าสุด {imported}</span>}
+            {imported && <span className="text-emerald-500">· ล่าสุด {imported}</span>}
         </div>
     );
 }
