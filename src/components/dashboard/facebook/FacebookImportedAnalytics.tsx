@@ -91,10 +91,10 @@ export default function FacebookImportedAnalytics() {
 
 function buildMetrics(data: FacebookContentDashboardResponse): DashboardMetric[] {
     return [
-        { id: "reach", label: "Reach รวม", value: data.totalReach.toLocaleString(), subtitle: "การเข้าถึงทั้งหมด", color: "text-blue-400" },
-        { id: "views", label: "ยอดดูรวม", value: data.totalViews.toLocaleString(), subtitle: "Views", color: "text-cyan-400" },
-        { id: "engagement", label: "Engagement รวม", value: data.totalEngagement.toLocaleString(), subtitle: "ไลก์ + คอมเมนต์ + แชร์", color: "text-green-400" },
-        { id: "posts", label: "จำนวนโพสต์", value: data.totalPosts.toLocaleString(), subtitle: "ทั้งหมด", color: "text-purple-400" },
+        { id: "reach", label: "Reach รวม", value: data.totalReach.toLocaleString(), subtitle: "การเข้าถึงทั้งหมด", color: "text-blue-600" },
+        { id: "views", label: "ยอดดูรวม", value: data.totalViews.toLocaleString(), subtitle: "Views", color: "text-cyan-600" },
+        { id: "engagement", label: "Engagement รวม", value: data.totalEngagement.toLocaleString(), subtitle: "ไลก์ + คอมเมนต์ + แชร์", color: "text-green-600" },
+        { id: "posts", label: "จำนวนโพสต์", value: data.totalPosts.toLocaleString(), subtitle: "ทั้งหมด", color: "text-purple-600" },
     ];
 }
 

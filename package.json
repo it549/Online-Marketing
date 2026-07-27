@@ -7,8 +7,10 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
+    "test": "vitest run",
     "postinstall": "prisma generate",
-    "seed:admin": "node scripts/seed-admin.js"
+    "seed:admin": "node scripts/seed-admin.js",
+    "seed:companies": "node scripts/seed-companies.js"
   },
   "dependencies": {
     "@google/generative-ai": "^0.24.1",
@@ -33,7 +35,8 @@
     "prettier": "^3.9.4",
     "prisma": "^6.19.3",
     "tailwindcss": "^4",
-    "typescript": "^5"
+    "typescript": "^5",
+    "vitest": "^4.1.10"
   },
   "allowScripts": {
     "unrs-resolver@1.12.2": true,

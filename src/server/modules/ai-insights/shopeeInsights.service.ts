@@ -4,10 +4,10 @@ import { AiInsightsResponse, AiInsightsSource } from "@/types/aiInsights";
 import { buildShopeeInsightsPrompt } from "./shopeeInsights.prompt";
 import { getShopeeCampaignProfitRanking } from "./shopeeTopCampaigns";
 
-export async function generateShopeeInsights(): Promise<AiInsightsResponse> {
+export async function generateShopeeInsights(companyId: bigint): Promise<AiInsightsResponse> {
     const [dashboard, campaignRanking] = await Promise.all([
-        getShopeeDashboardData("month", {}),
-        getShopeeCampaignProfitRanking(),
+        getShopeeDashboardData(companyId, "month", {}),
+        getShopeeCampaignProfitRanking(companyId),
     ]);
 
     const sources: AiInsightsSource[] = [];

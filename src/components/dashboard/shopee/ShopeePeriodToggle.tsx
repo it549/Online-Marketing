@@ -22,8 +22,8 @@ export default function ShopeePeriodToggle({ value, onChange }: Props) {
                     onClick={() => onChange(option.value)}
                     className={`rounded-lg px-3 py-1.5 text-sm font-medium transition-colors ${
                         value === option.value
-                            ? "bg-blue-600 text-white"
-                            : "bg-slate-900 text-slate-400 hover:bg-slate-800"
+                            ? "bg-indigo-600 text-white shadow-sm"
+                            : "border border-slate-200 bg-white text-slate-500 hover:bg-slate-50"
                     }`}
                 >
                     {option.label}

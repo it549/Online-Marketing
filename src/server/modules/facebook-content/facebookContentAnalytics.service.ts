@@ -8,10 +8,10 @@ import { getFacebookContentRepository, listFacebookContentImportJobs } from "./f
 
 const UNSPECIFIED_POST_TYPE = "ไม่ระบุ";
 
-export async function getFacebookContentAnalytics(importJobId?: string): Promise<FacebookContentDashboardResponse> {
+export async function getFacebookContentAnalytics(companyId: bigint, importJobId?: string): Promise<FacebookContentDashboardResponse> {
     const [posts, importJobs] = await Promise.all([
-        getFacebookContentRepository(importJobId),
-        listFacebookContentImportJobs(),
+        getFacebookContentRepository(companyId, importJobId),
+        listFacebookContentImportJobs(companyId),
     ]);
 
     const importBatches: FacebookContentImportBatch[] = importJobs.map((job) => ({

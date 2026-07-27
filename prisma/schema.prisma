@@ -7,6 +7,31 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+// --- Company domain ----------------------------------------------------------
+// Each company owns its own ad accounts and imported files; Platform (facebook/
+// shopee/tiktok) stays a shared, company-agnostic taxonomy.
+
+model Company {
+  id                    BigInt             @id @default(autoincrement())
+  name                  String
+  code                  String             @unique
+  platforms             Json?
+  facebookAdAccountId   String?            @map("facebook_ad_account_id")
+  facebookAccessToken   String?            @map("facebook_access_token") @db.Text
+  googleAdsCustomerId   String?            @map("google_ads_customer_id")
+  googleAdsRefreshToken String?            @map("google_ads_refresh_token") @db.Text
+  tiktokAdvertiserId    String?            @map("tiktok_advertiser_id")
+  tiktokAccessToken     String?            @map("tiktok_access_token") @db.Text
+  createdAt             DateTime           @default(now()) @map("created_at")
+  updatedAt             DateTime           @updatedAt @map("updated_at")
+  campaigns           Campaign[]
+  importJobs          ImportJob[]
+  contentImportJobs   ContentImportJob[]
+  contentPosts        ContentPost[]
+
+  @@map("companies")
+}
+
 // --- Auth domain -----------------------------------------------------------
 
 model User {
@@ -41,6 +66,7 @@ model Platform {
 
 model Campaign {
   id                 BigInt                 @id @default(autoincrement())
+  companyId          BigInt                 @map("company_id")
   platformId         BigInt                 @map("platform_id")
   externalCampaignId String                 @map("external_campaign_id")
   campaignName       String                 @map("campaign_name")
@@ -53,15 +79,17 @@ model Campaign {
   endDate            DateTime?              @map("end_date") @db.Date
   createdAt          DateTime               @default(now()) @map("created_at")
   updatedAt          DateTime               @updatedAt @map("updated_at")
+  company            Company                @relation(fields: [companyId], references: [id])
   platform           Platform               @relation(fields: [platformId], references: [id])
   reportMetrics      CampaignReportMetric[]
 
-  @@unique([platformId, externalCampaignId])
+  @@unique([companyId, platformId, externalCampaignId])
   @@map("campaigns")
 }
 
 model ImportJob {
   id              BigInt                 @id @default(autoincrement())
+  companyId       BigInt                 @map("company_id")
   platformId      BigInt                 @map("platform_id")
   filename        String
   reportName      String                 @map("report_name")
@@ -74,6 +102,7 @@ model ImportJob {
   importedAt      DateTime?              @map("imported_at")
   createdAt       DateTime               @default(now()) @map("created_at")
   updatedAt       DateTime               @updatedAt @map("updated_at")
+  company         Company                @relation(fields: [companyId], references: [id])
   platform        Platform               @relation(fields: [platformId], references: [id])
   reportMetrics   CampaignReportMetric[]
 
@@ -148,6 +177,7 @@ model ContentPlatform {
 
 model ContentImportJob {
   id             BigInt          @id @default(autoincrement())
+  companyId      BigInt          @map("company_id")
   platformId     BigInt          @map("platform_id")
   filename       String
   rangeStartDate DateTime?       @map("range_start_date") @db.Date
@@ -158,6 +188,7 @@ model ContentImportJob {
   importedAt     DateTime?       @map("imported_at")
   createdAt      DateTime        @default(now()) @map("created_at")
   updatedAt      DateTime        @updatedAt @map("updated_at")
+  company        Company         @relation(fields: [companyId], references: [id])
   platform       ContentPlatform @relation(fields: [platformId], references: [id])
   posts          ContentPost[]
 
@@ -166,6 +197,7 @@ model ContentImportJob {
 
 model ContentPost {
   id              BigInt             @id @default(autoincrement())
+  companyId       BigInt             @map("company_id")
   platformId      BigInt             @map("platform_id")
   externalPostId  String             @map("external_post_id")
   pageExternalId  String?            @map("page_external_id")
@@ -178,11 +210,12 @@ model ContentPost {
   lastImportJobId BigInt?            @map("last_import_job_id")
   createdAt       DateTime           @default(now()) @map("created_at")
   updatedAt       DateTime           @updatedAt @map("updated_at")
+  company         Company            @relation(fields: [companyId], references: [id])
   platform        ContentPlatform    @relation(fields: [platformId], references: [id])
   lastImportJob   ContentImportJob?  @relation(fields: [lastImportJobId], references: [id])
   metric          ContentPostMetric?
 
-  @@unique([platformId, externalPostId])
+  @@unique([companyId, platformId, externalPostId])
   @@map("content_posts")
 }
 

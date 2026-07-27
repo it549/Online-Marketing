@@ -10,9 +10,9 @@ interface Props {
 
 export default function DashboardTable({ table, title = "รายการข้อมูล" }: Props) {
     return (
-        <div className="overflow-hidden rounded-xl border border-slate-700 bg-slate-800">
-            <div className="border-b border-slate-700 px-5 py-4">
-                <h3 className="text-sm font-semibold text-white">{title}</h3>
+        <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+            <div className="border-b border-slate-100 px-5 py-4">
+                <h3 className="text-sm font-semibold text-slate-900">{title}</h3>
             </div>
 
             <table className="w-full text-sm">
