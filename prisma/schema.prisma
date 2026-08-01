@@ -18,10 +18,15 @@ model Company {
   platforms             Json?
   facebookAdAccountId   String?            @map("facebook_ad_account_id")
   facebookAccessToken   String?            @map("facebook_access_token") @db.Text
+  facebookTokenExpiresAt   DateTime?       @map("facebook_token_expires_at")
   googleAdsCustomerId   String?            @map("google_ads_customer_id")
   googleAdsRefreshToken String?            @map("google_ads_refresh_token") @db.Text
   tiktokAdvertiserId    String?            @map("tiktok_advertiser_id")
   tiktokAccessToken     String?            @map("tiktok_access_token") @db.Text
+  shopeeShopId          String?            @map("shopee_shop_id")
+  shopeeAccessToken     String?            @map("shopee_access_token") @db.Text
+  shopeeRefreshToken    String?            @map("shopee_refresh_token") @db.Text
+  shopeeTokenExpiresAt  DateTime?          @map("shopee_token_expires_at")
   createdAt             DateTime           @default(now()) @map("created_at")
   updatedAt             DateTime           @updatedAt @map("updated_at")
   campaigns           Campaign[]

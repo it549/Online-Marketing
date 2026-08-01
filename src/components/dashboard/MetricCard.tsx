@@ -35,6 +35,7 @@ const ICON_BY_ID: Record<string, LucideIcon> = {
     lead: UserPlus,
     cpl: Coins,
     views: Eye,
+    reactions: Heart,
     engagement: Heart,
     posts: FileText,
 };
