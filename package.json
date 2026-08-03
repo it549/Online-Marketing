@@ -10,10 +10,15 @@
     "test": "vitest run",
     "postinstall": "prisma generate",
     "seed:admin": "node scripts/seed-admin.js",
-    "seed:companies": "node scripts/seed-companies.js"
+    "seed:companies": "node scripts/seed-companies.js",
+    "preview": "opennextjs-cloudflare build && opennextjs-cloudflare preview",
+    "deploy": "opennextjs-cloudflare build && opennextjs-cloudflare deploy",
+    "cf-typegen": "wrangler types --env-interface CloudflareEnv cloudflare-env.d.ts"
   },
   "dependencies": {
     "@google/generative-ai": "^0.24.1",
+    "@opennextjs/cloudflare": "^1.20.2",
+    "@prisma/adapter-pg": "^7.9.1",
     "@prisma/client": "^6.19.3",
     "anthropic": "^0.0.0",
     "axios": "^1.18.1",
@@ -22,7 +27,8 @@
     "google-auth-library": "^10.9.1",
     "groq-sdk": "^1.3.0",
     "lucide-react": "^1.23.0",
-    "next": "16.2.9",
+    "next": "^16.2.12",
+    "pg": "^8.22.0",
     "react": "19.2.4",
     "react-dom": "19.2.4"
   },
@@ -38,7 +44,8 @@
     "prisma": "^6.19.3",
     "tailwindcss": "^4",
     "typescript": "^5",
-    "vitest": "^4.1.10"
+    "vitest": "^4.1.10",
+    "wrangler": "^4.118.0"
   },
   "allowScripts": {
     "unrs-resolver@1.12.2": true,
