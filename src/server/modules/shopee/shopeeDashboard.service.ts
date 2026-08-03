@@ -7,6 +7,7 @@ import { getBucketKey, getBucketRange, ShopeeBucketAccumulator } from "./shopeeD
 import { mapShopeeDashboard } from "./shopeeDashboard.mapper";
 
 export async function getShopeeDashboardData(
+    companyId: bigint,
     granularity: ShopeePeriodGranularity,
     filters: ShopeeDashboardFilters,
 ): Promise<ShopeeDashboardResponse> {
@@ -14,15 +15,15 @@ export async function getShopeeDashboardData(
     const dateTo = filters.dateTo ? new Date(filters.dateTo) : undefined;
 
     const [repoResult, availableCampaigns, importJobs] = await Promise.all([
-        getShopeeCampaignsRepository({
+        getShopeeCampaignsRepository(companyId, {
             productId: filters.productId,
             campaignName: filters.campaignName,
             status: filters.status,
             dateFrom,
             dateTo,
         }),
-        getShopeeAvailableFiltersRepository(),
-        getShopeeImportJobsRepository(),
+        getShopeeAvailableFiltersRepository(companyId),
+        getShopeeImportJobsRepository(companyId),
     ]);
 
     const availableFilters = buildAvailableFilters(availableCampaigns);

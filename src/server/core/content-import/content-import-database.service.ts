@@ -2,7 +2,7 @@ import { Prisma } from "@prisma/client";
 import { prisma } from "@/server/database/prisma";
 import { NormalizedContentImportResult } from "./content-import.types";
 
-export async function saveContentImportResult(result: NormalizedContentImportResult, fileName: string) {
+export async function saveContentImportResult(result: NormalizedContentImportResult, fileName: string, companyId: bigint) {
     return prisma.$transaction(
         async (tx: Prisma.TransactionClient) => {
             const platform = await tx.contentPlatform.upsert({
@@ -16,6 +16,7 @@ export async function saveContentImportResult(result: NormalizedContentImportRes
 
             const importJob = await tx.contentImportJob.create({
                 data: {
+                    companyId,
                     platformId: platform.id,
                     filename: fileName,
                     rangeStartDate: result.rangeStartDate,
@@ -32,7 +33,8 @@ export async function saveContentImportResult(result: NormalizedContentImportRes
             for (const post of result.posts) {
                 const savedPost = await tx.contentPost.upsert({
                     where: {
-                        platformId_externalPostId: {
+                        companyId_platformId_externalPostId: {
+                            companyId,
                             platformId: platform.id,
                             externalPostId: post.externalPostId,
                         },
@@ -50,6 +52,7 @@ export async function saveContentImportResult(result: NormalizedContentImportRes
                     },
 
                     create: {
+                        companyId,
                         platformId: platform.id,
                         externalPostId: post.externalPostId,
                         pageExternalId: post.pageExternalId,

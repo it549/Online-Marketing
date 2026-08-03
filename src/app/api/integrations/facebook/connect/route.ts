@@ -1,0 +1,32 @@
+import { NextRequest, NextResponse } from "next/server";
+import { randomUUID } from "crypto";
+import { requireAdmin } from "@/server/core/auth/api-guard";
+import { config } from "@/server/configurations/config";
+
+const FACEBOOK_SCOPE = "ads_read"; // เพิ่ม ads_management ถ้าต้องแก้ไขแคมเปญด้วย ไม่ใช่แค่อ่าน
+const STATE_COOKIE_NAME = "facebook_oauth_state";
+
+export async function GET(request: NextRequest) {
+    const guard = requireAdmin(request);
+    if (guard.response) return guard.response;
+
+    const state = randomUUID();
+
+    const authUrl = new URL(`https://www.facebook.com/${config.facebook.apiVersion}/dialog/oauth`);
+    authUrl.searchParams.set("client_id", config.facebook.appId);
+    authUrl.searchParams.set("redirect_uri", config.facebook.redirectUrl);
+    authUrl.searchParams.set("scope", FACEBOOK_SCOPE);
+    authUrl.searchParams.set("state", state);
+    authUrl.searchParams.set("response_type", "code");
+
+    const response = NextResponse.redirect(authUrl.toString());
+    response.cookies.set(STATE_COOKIE_NAME, state, {
+        httpOnly: true,
+        secure: true,
+        sameSite: "lax",
+        maxAge: 60 * 10,
+        path: "/",
+    });
+
+    return response;
+}

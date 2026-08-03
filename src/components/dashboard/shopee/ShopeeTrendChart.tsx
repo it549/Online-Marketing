@@ -4,10 +4,9 @@ interface Props {
     buckets: ShopeeDashboardBucket[];
 }
 
-// Validated (dataviz skill) categorical pair against this app's dark
-// slate-800 chart surface: CVD ΔE 26.8, normal-vision ΔE 31.8, contrast >=3:1.
-const SPEND_COLOR = "#3987e5";
-const REVENUE_COLOR = "#d95926";
+// Blue/orange categorical pair, tuned for contrast on a white chart surface.
+const SPEND_COLOR = "#4f46e5";
+const REVENUE_COLOR = "#ea580c";
 
 const CHART_HEIGHT = 200;
 const BAR_MAX_WIDTH = 24;
@@ -28,15 +27,15 @@ export default function ShopeeTrendChart({ buckets }: Props) {
     }
 
     return (
-        <div className="rounded-xl border border-slate-700 bg-slate-800 p-5">
-            <div className="mb-4 flex items-center gap-4 text-xs text-slate-400">
+        <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+            <div className="mb-4 flex items-center gap-4 text-xs text-slate-500">
                 <span className="flex items-center gap-1.5">
-                    <span className="inline-block h-2.5 w-2.5 rounded-sm" style={{ backgroundColor: SPEND_COLOR }} />
+                    <span className="inline-block h-2.5 w-2.5 rounded-full" style={{ backgroundColor: SPEND_COLOR }} />
                     ค่าโฆษณา
                 </span>
 
                 <span className="flex items-center gap-1.5">
-                    <span className="inline-block h-2.5 w-2.5 rounded-sm" style={{ backgroundColor: REVENUE_COLOR }} />
+                    <span className="inline-block h-2.5 w-2.5 rounded-full" style={{ backgroundColor: REVENUE_COLOR }} />
                     ยอดขาย
                 </span>
             </div>
@@ -48,7 +47,7 @@ export default function ShopeeTrendChart({ buckets }: Props) {
                         y1={CHART_HEIGHT - 24}
                         x2={Math.max(chartWidth, 240)}
                         y2={CHART_HEIGHT - 24}
-                        stroke="#383835"
+                        stroke="#e2e8f0"
                         strokeWidth={1}
                     />
 
@@ -87,7 +86,7 @@ export default function ShopeeTrendChart({ buckets }: Props) {
                                     y={CHART_HEIGHT}
                                     textAnchor="middle"
                                     fontSize={10}
-                                    fill="#898781"
+                                    fill="#94a3b8"
                                 >
                                     {bucket.periodLabel}
                                 </text>

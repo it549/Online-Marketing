@@ -1,12 +1,13 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { importContentCsv } from "@/server/core/content-import/content-import.service";
 import { saveContentImportResult } from "@/server/core/content-import/content-import-database.service";
 import { ContentPlatformCode } from "@/server/core/content-import/content-import.types";
 import { requireAdmin } from "@/server/core/auth/api-guard";
+import { getSelectedCompanyId } from "@/server/core/company/selectedCompany";
 
 const SUPPORTED_PLATFORM_CODES: ContentPlatformCode[] = ["FACEBOOK"];
 
-export async function POST(request: Request) {
+export async function POST(request: NextRequest) {
     const guard = requireAdmin(request);
     if (guard.response) return guard.response;
 
@@ -47,7 +48,8 @@ export async function POST(request: Request) {
             csvContent,
         });
 
-        const importJob = await saveContentImportResult(result, file.name);
+        const companyId = await getSelectedCompanyId(request);
+        const importJob = await saveContentImportResult(result, file.name, companyId);
 
         return NextResponse.json(
             {

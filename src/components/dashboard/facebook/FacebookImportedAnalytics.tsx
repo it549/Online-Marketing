@@ -8,6 +8,7 @@ import DashboardTable from "../DashboardTable";
 import DashboardEmptyState from "../DashboardEmptyState";
 import ImportCsvButton from "../ImportCsvButton";
 import ImportedFilesPanel from "../ImportedFilesPanel";
+import PostTypeBreakdownChart from "./PostTypeBreakdownChart";
 import { useFacebookContentAnalytics } from "@/hooks/useFacebookContentAnalytics";
 import { IMPORT_CONFIG_BY_PLATFORM } from "@/constants/importConfig";
 import { DashboardMetric } from "@/types/metric";
@@ -44,6 +45,8 @@ export default function FacebookImportedAnalytics() {
 
                     <MetricCards metrics={buildMetrics(data)} />
 
+                    <PostTypeBreakdownChart breakdown={data.breakdown} />
+
                     <DashboardTable
                         title="โพสต์"
                         table={{
@@ -64,25 +67,6 @@ export default function FacebookImportedAnalytics() {
                             })),
                         }}
                     />
-
-                    <DashboardTable
-                        title="แยกตามประเภทโพสต์"
-                        table={{
-                            columns: [
-                                { key: "name", label: "ประเภทโพสต์" },
-                                { key: "postCount", label: "จำนวนโพสต์", align: "right" },
-                                { key: "totalReach", label: "Reach รวม", align: "right" },
-                                { key: "totalEngagement", label: "Engagement รวม", align: "right" },
-                            ],
-                            rows: data.breakdown.map((item) => ({
-                                id: item.postType,
-                                name: item.postType,
-                                postCount: item.postCount.toLocaleString(),
-                                totalReach: item.totalReach.toLocaleString(),
-                                totalEngagement: item.totalEngagement.toLocaleString(),
-                            })),
-                        }}
-                    />
                 </>
             )}
         </div>
@@ -91,10 +75,11 @@ export default function FacebookImportedAnalytics() {
 
 function buildMetrics(data: FacebookContentDashboardResponse): DashboardMetric[] {
     return [
-        { id: "reach", label: "Reach รวม", value: data.totalReach.toLocaleString(), subtitle: "การเข้าถึงทั้งหมด", color: "text-blue-400" },
-        { id: "views", label: "ยอดดูรวม", value: data.totalViews.toLocaleString(), subtitle: "Views", color: "text-cyan-400" },
-        { id: "engagement", label: "Engagement รวม", value: data.totalEngagement.toLocaleString(), subtitle: "ไลก์ + คอมเมนต์ + แชร์", color: "text-green-400" },
-        { id: "posts", label: "จำนวนโพสต์", value: data.totalPosts.toLocaleString(), subtitle: "ทั้งหมด", color: "text-purple-400" },
+        { id: "reach", label: "Reach รวม", value: data.totalReach.toLocaleString(), subtitle: "จำนวนคนที่เข้าถึงเพจ", color: "text-blue-600" },
+        { id: "views", label: "ยอดดูรวม", value: data.totalViews.toLocaleString(), subtitle: "Views", color: "text-cyan-600" },
+        { id: "reactions", label: "การกดใจรวม", value: data.totalReactions.toLocaleString(), subtitle: "Reactions", color: "text-pink-600" },
+        { id: "engagement", label: "Engagement รวม", value: data.totalEngagement.toLocaleString(), subtitle: "กดใจ + คอมเมนต์ + แชร์", color: "text-green-600" },
+        { id: "posts", label: "จำนวนโพสต์", value: data.totalPosts.toLocaleString(), subtitle: "ทั้งหมด", color: "text-purple-600" },
     ];
 }
 

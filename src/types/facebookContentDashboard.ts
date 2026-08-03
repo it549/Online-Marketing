@@ -31,6 +31,7 @@ export interface FacebookContentDashboardResponse {
     totalPosts: number;
     totalReach: number;
     totalViews: number;
+    totalReactions: number;
     totalEngagement: number;
     posts: FacebookContentPostSummary[];
     breakdown: FacebookContentTypeBreakdown[];

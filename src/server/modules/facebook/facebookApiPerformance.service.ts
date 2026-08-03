@@ -6,13 +6,29 @@ import { ApiPerformanceResponse } from "@/types/apiPerformance";
 
 const DATE_PRESET_LABEL = "30 วันล่าสุด";
 
-export async function getFacebookApiPerformance(): Promise<ApiPerformanceResponse> {
+export interface FacebookAdAccountCredentials {
+    adAccountId: string;
+    accessToken: string;
+}
+
+export async function getFacebookApiPerformance(credentials: FacebookAdAccountCredentials | null): Promise<ApiPerformanceResponse> {
+    if (!credentials) {
+        return {
+            connected: false,
+            lastSyncedAt: null,
+            dateRangeLabel: null,
+            error: "ยังไม่ได้ตั้งค่า Facebook Ad Account สำหรับบริษัทนี้",
+            metrics: [],
+            table: { columns: [], rows: [] },
+        };
+    }
+
     try {
         const params: GetCampaignsParams = {
             baseUrl: config.facebook.baseUrl,
             apiVersion: config.facebook.apiVersion,
-            accessToken: config.facebook.accessToken,
-            adAccountId: config.facebook.adAccountId,
+            accessToken: credentials.accessToken,
+            adAccountId: credentials.adAccountId,
             datePreset: "last_30d",
         };
 
@@ -69,15 +85,29 @@ export async function getFacebookApiPerformance(): Promise<ApiPerformanceRespons
             lastSyncedAt: new Date().toISOString(),
             dateRangeLabel: DATE_PRESET_LABEL,
             metrics: [
-                { id: "spend", label: "ยอดใช้จ่าย", value: `฿${totalSpend.toLocaleString()}`, subtitle: DATE_PRESET_LABEL, color: "text-blue-400" },
-                { id: "impressions", label: "Impressions", value: totalImpressions.toLocaleString(), subtitle: DATE_PRESET_LABEL, color: "text-cyan-400" },
-                { id: "reach", label: "Reach", value: totalReach.toLocaleString(), subtitle: DATE_PRESET_LABEL, color: "text-teal-400" },
-                { id: "clicks", label: "Clicks", value: totalClicks.toLocaleString(), subtitle: DATE_PRESET_LABEL, color: "text-indigo-400" },
-                { id: "ctr", label: "CTR", value: `${avgCtr.toFixed(2)}%`, subtitle: "Click Through Rate", color: "text-purple-400" },
-                { id: "leads", label: "Leads", value: totalLeads.toString(), subtitle: DATE_PRESET_LABEL, color: "text-green-400" },
-                { id: "cpl", label: "Cost / Lead", value: totalLeads > 0 ? `฿${avgCpl.toFixed(2)}` : "-", subtitle: "Average", color: "text-yellow-400" },
-                { id: "roas", label: "ROAS", value: avgRoas !== null ? avgRoas.toFixed(2) : "-", subtitle: "Purchase Value / Spend", color: "text-emerald-400" },
+                { id: "spend", label: "ยอดใช้จ่าย", value: `฿${totalSpend.toLocaleString()}`, subtitle: DATE_PRESET_LABEL, color: "text-blue-600" },
+                { id: "impressions", label: "Impressions", value: totalImpressions.toLocaleString(), subtitle: DATE_PRESET_LABEL, color: "text-cyan-600" },
+                { id: "reach", label: "Reach", value: totalReach.toLocaleString(), subtitle: DATE_PRESET_LABEL, color: "text-teal-600" },
+                { id: "clicks", label: "Clicks", value: totalClicks.toLocaleString(), subtitle: DATE_PRESET_LABEL, color: "text-indigo-600" },
+                { id: "ctr", label: "CTR", value: `${avgCtr.toFixed(2)}%`, subtitle: "Click Through Rate", color: "text-purple-600" },
+                { id: "leads", label: "Leads", value: totalLeads.toString(), subtitle: DATE_PRESET_LABEL, color: "text-green-600" },
+                { id: "cpl", label: "Cost / Lead", value: totalLeads > 0 ? `฿${avgCpl.toFixed(2)}` : "-", subtitle: "Average", color: "text-sky-600" },
+                { id: "roas", label: "ROAS", value: avgRoas !== null ? avgRoas.toFixed(2) : "-", subtitle: "Purchase Value / Spend", color: "text-emerald-600" },
             ],
+            summary: {
+                spend: totalSpend,
+                leads: totalLeads,
+                roas: avgRoas,
+                reach: totalReach,
+            },
+            campaigns: campaigns.map((campaign) => ({
+                id: campaign.id,
+                name: campaign.name,
+                spend: campaign.spend,
+                leads: campaign.leads,
+                cpl: campaign.cpl,
+                status: campaign.status,
+            })),
             table: {
                 columns: [
                     { key: "name", label: "Campaign" },

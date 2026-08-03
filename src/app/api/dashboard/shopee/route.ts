@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getShopeeDashboardData } from "@/server/modules/shopee/shopeeDashboard.service";
 import { ShopeePeriodGranularity } from "@/types/shopeeDashboard";
 import { requireAdmin } from "@/server/core/auth/api-guard";
+import { getSelectedCompanyId } from "@/server/core/company/selectedCompany";
 
 const VALID_GRANULARITIES: ShopeePeriodGranularity[] = ["week", "month", "quarter"];
 
@@ -16,7 +17,8 @@ export async function GET(request: NextRequest) {
             ? (periodParam as ShopeePeriodGranularity)
             : "week";
 
-        const dashboard = await getShopeeDashboardData(granularity, {
+        const companyId = await getSelectedCompanyId(request);
+        const dashboard = await getShopeeDashboardData(companyId, granularity, {
             dateFrom: params.get("dateFrom") ?? undefined,
             dateTo: params.get("dateTo") ?? undefined,
             productId: params.get("productId") ?? undefined,

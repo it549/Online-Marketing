@@ -1,10 +1,11 @@
-import { NextResponse, } from "next/server";
+import { NextRequest, NextResponse, } from "next/server";
 import { importCsv, } from "@/server/core/import/import.service";
 import { saveImportResult, } from "@/server/core/import/import-database.service";
 import { Platform, } from "@/server/core/import/import.types";
 import { requireAdmin } from "@/server/core/auth/api-guard";
+import { getSelectedCompanyId } from "@/server/core/company/selectedCompany";
 
-export async function POST(request: Request,) {
+export async function POST(request: NextRequest,) {
     const guard = requireAdmin(request);
     if (guard.response) return guard.response;
 
@@ -44,7 +45,8 @@ export async function POST(request: Request,) {
             csvContent,
         });
 
-        const importJob = await saveImportResult(result, file.name,);
+        const companyId = await getSelectedCompanyId(request);
+        const importJob = await saveImportResult(result, file.name, companyId,);
 
         return NextResponse.json(
             {

@@ -11,7 +11,7 @@ export interface ShopeeDashboardQueryFilters {
     dateTo?: Date;
 }
 
-export async function getShopeeCampaignsRepository(filters: ShopeeDashboardQueryFilters) {
+export async function getShopeeCampaignsRepository(companyId: bigint, filters: ShopeeDashboardQueryFilters) {
     const platform = await prisma.platform.findUnique({
         where: { code: SHOPEE_PLATFORM_CODE },
     });
@@ -20,7 +20,7 @@ export async function getShopeeCampaignsRepository(filters: ShopeeDashboardQuery
         return null;
     }
 
-    const campaignWhere: Prisma.CampaignWhereInput = { platformId: platform.id };
+    const campaignWhere: Prisma.CampaignWhereInput = { companyId, platformId: platform.id };
 
     if (filters.productId) campaignWhere.productId = filters.productId;
     if (filters.campaignName) campaignWhere.campaignName = filters.campaignName;
@@ -42,7 +42,7 @@ export async function getShopeeCampaignsRepository(filters: ShopeeDashboardQuery
 // Unfiltered list, used only to populate filter dropdown options -- always
 // shows every real product/campaign/status regardless of the currently
 // selected filters, so options never disappear as the user narrows down.
-export async function getShopeeAvailableFiltersRepository() {
+export async function getShopeeAvailableFiltersRepository(companyId: bigint) {
     const platform = await prisma.platform.findUnique({
         where: { code: SHOPEE_PLATFORM_CODE },
     });
@@ -52,12 +52,12 @@ export async function getShopeeAvailableFiltersRepository() {
     }
 
     return prisma.campaign.findMany({
-        where: { platformId: platform.id },
+        where: { companyId, platformId: platform.id },
         select: { productId: true, campaignName: true, campaignStatus: true },
     });
 }
 
-export async function getShopeeImportJobsRepository() {
+export async function getShopeeImportJobsRepository(companyId: bigint) {
     const platform = await prisma.platform.findUnique({
         where: { code: SHOPEE_PLATFORM_CODE },
     });
@@ -67,7 +67,7 @@ export async function getShopeeImportJobsRepository() {
     }
 
     return prisma.importJob.findMany({
-        where: { platformId: platform.id, status: "COMPLETED" },
+        where: { companyId, platformId: platform.id, status: "COMPLETED" },
         orderBy: { importedAt: "desc" },
     });
 }

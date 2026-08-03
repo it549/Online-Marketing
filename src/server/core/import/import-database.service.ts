@@ -1,7 +1,7 @@
 import { prisma, } from "@/server/database/prisma";
 import { NormalizedImportResult, } from "./import.types";
 
-export async function saveImportResult(result: NormalizedImportResult, fileName: string,) {
+export async function saveImportResult(result: NormalizedImportResult, fileName: string, companyId: bigint,) {
     return prisma.$transaction(
         async (tx: any) => {
             const platform = await tx.platform.upsert({
@@ -21,6 +21,7 @@ export async function saveImportResult(result: NormalizedImportResult, fileName:
             // miss that and silently double-count the overlapping days.
             const overlappingImport = await tx.importJob.findFirst({
                 where: {
+                    companyId,
                     platformId: platform.id,
                     status: "COMPLETED",
                     reportStartDate: { lte: result.report.reportEndDate, },
@@ -36,6 +37,7 @@ export async function saveImportResult(result: NormalizedImportResult, fileName:
 
             const importJob = await tx.importJob.create({
                 data: {
+                    companyId,
                     platformId: platform.id,
                     filename: fileName,
                     reportName: result.report.reportName,
@@ -49,7 +51,8 @@ export async function saveImportResult(result: NormalizedImportResult, fileName:
             for (const campaign of result.campaigns) {
                 const savedCampaign = await tx.campaign.upsert({
                     where: {
-                        platformId_externalCampaignId: {
+                        companyId_platformId_externalCampaignId: {
+                            companyId,
                             platformId: platform.id,
                             externalCampaignId: campaign.externalCampaignId,
                         },
@@ -67,6 +70,7 @@ export async function saveImportResult(result: NormalizedImportResult, fileName:
                     },
 
                     create: {
+                        companyId,
                         platformId: platform.id,
                         externalCampaignId: campaign.externalCampaignId,
                         campaignName: campaign.campaignName,

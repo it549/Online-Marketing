@@ -29,6 +29,7 @@ export function buildFacebookInsightsPrompt(
                 `- จำนวนโพสต์: ${contentAnalytics.totalPosts.toLocaleString()}\n` +
                 `- Reach รวม: ${contentAnalytics.totalReach.toLocaleString()}\n` +
                 `- Views รวม: ${contentAnalytics.totalViews.toLocaleString()}\n` +
+                `- การกดใจรวม (Reactions): ${contentAnalytics.totalReactions.toLocaleString()}\n` +
                 `- Engagement รวม: ${contentAnalytics.totalEngagement.toLocaleString()}\n\n` +
                 `แยกตามประเภทโพสต์:\n${breakdown}\n\n` +
                 `โพสต์ที่มี Reach สูงสุด:\n${topPosts}`,

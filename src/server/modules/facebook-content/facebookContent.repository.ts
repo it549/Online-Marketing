@@ -2,7 +2,7 @@ import { prisma } from "@/server/database/prisma";
 
 const FACEBOOK_CONTENT_PLATFORM_CODE = "FACEBOOK";
 
-export async function getFacebookContentRepository(importJobId?: string) {
+export async function getFacebookContentRepository(companyId: bigint, importJobId?: string) {
     const platform = await prisma.contentPlatform.findUnique({
         where: { code: FACEBOOK_CONTENT_PLATFORM_CODE },
     });
@@ -13,6 +13,7 @@ export async function getFacebookContentRepository(importJobId?: string) {
 
     const posts = await prisma.contentPost.findMany({
         where: {
+            companyId,
             platformId: platform.id,
             ...(importJobId ? { lastImportJobId: BigInt(importJobId) } : {}),
         },
@@ -22,7 +23,7 @@ export async function getFacebookContentRepository(importJobId?: string) {
     return posts;
 }
 
-export async function listFacebookContentImportJobs() {
+export async function listFacebookContentImportJobs(companyId: bigint) {
     const platform = await prisma.contentPlatform.findUnique({
         where: { code: FACEBOOK_CONTENT_PLATFORM_CODE },
     });
@@ -32,7 +33,7 @@ export async function listFacebookContentImportJobs() {
     }
 
     return prisma.contentImportJob.findMany({
-        where: { platformId: platform.id, status: "COMPLETED" },
+        where: { companyId, platformId: platform.id, status: "COMPLETED" },
         orderBy: { importedAt: "desc" },
     });
 }

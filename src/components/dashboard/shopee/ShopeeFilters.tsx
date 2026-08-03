@@ -13,7 +13,7 @@ const STATUS_LABELS: Record<string, string> = {
     PAUSED: "หยุด",
 };
 
-const selectClassName = "rounded-lg border border-slate-700 bg-slate-900 px-3 py-1.5 text-sm text-white";
+const selectClassName = "rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm text-slate-700 focus:border-indigo-500 focus:outline-none";
 
 export default function ShopeeFilters({ filters, availableFilters, onChange }: Props) {
     const hasActiveFilters = Boolean(filters.dateFrom || filters.dateTo || filters.productId || filters.campaignName || filters.status);
@@ -83,7 +83,7 @@ export default function ShopeeFilters({ filters, availableFilters, onChange }: P
             {hasActiveFilters && (
                 <button
                     onClick={() => onChange({})}
-                    className="rounded-lg px-3 py-1.5 text-sm text-slate-400 hover:bg-slate-800 hover:text-white"
+                    className="rounded-lg px-3 py-1.5 text-sm text-slate-500 hover:bg-slate-100 hover:text-slate-700"
                 >
                     ล้างตัวกรอง
                 </button>

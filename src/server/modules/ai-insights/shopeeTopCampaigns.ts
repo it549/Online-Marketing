@@ -8,8 +8,8 @@ export interface ShopeeCampaignProfit {
     profit: number;
 }
 
-export async function getShopeeCampaignProfitRanking(): Promise<ShopeeCampaignProfit[]> {
-    const repoResult = await getShopeeCampaignsRepository({});
+export async function getShopeeCampaignProfitRanking(companyId: bigint): Promise<ShopeeCampaignProfit[]> {
+    const repoResult = await getShopeeCampaignsRepository(companyId, {});
 
     if (!repoResult) {
         return [];

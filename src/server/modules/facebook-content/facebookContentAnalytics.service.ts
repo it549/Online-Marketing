@@ -8,10 +8,10 @@ import { getFacebookContentRepository, listFacebookContentImportJobs } from "./f
 
 const UNSPECIFIED_POST_TYPE = "ไม่ระบุ";
 
-export async function getFacebookContentAnalytics(importJobId?: string): Promise<FacebookContentDashboardResponse> {
+export async function getFacebookContentAnalytics(companyId: bigint, importJobId?: string): Promise<FacebookContentDashboardResponse> {
     const [posts, importJobs] = await Promise.all([
-        getFacebookContentRepository(importJobId),
-        listFacebookContentImportJobs(),
+        getFacebookContentRepository(companyId, importJobId),
+        listFacebookContentImportJobs(companyId),
     ]);
 
     const importBatches: FacebookContentImportBatch[] = importJobs.map((job) => ({
@@ -28,6 +28,7 @@ export async function getFacebookContentAnalytics(importJobId?: string): Promise
             totalPosts: 0,
             totalReach: 0,
             totalViews: 0,
+            totalReactions: 0,
             totalEngagement: 0,
             posts: [],
             breakdown: [],
@@ -83,6 +84,7 @@ export async function getFacebookContentAnalytics(importJobId?: string): Promise
         totalPosts: postSummaries.length,
         totalReach: postSummaries.reduce((sum, post) => sum + post.reach, 0),
         totalViews: postSummaries.reduce((sum, post) => sum + post.views, 0),
+        totalReactions: postSummaries.reduce((sum, post) => sum + post.reactions, 0),
         totalEngagement: postSummaries.reduce((sum, post) => sum + post.engagement, 0),
         posts: postSummaries,
         breakdown: Array.from(breakdownByType.values()).sort((a, b) => b.totalReach - a.totalReach),
