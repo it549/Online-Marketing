@@ -1,11 +1,10 @@
 import { getFacebookApiPerformance } from "@/server/modules/facebook/facebookApiPerformance.service";
-import { getShopeeDashboardData } from "@/server/modules/shopee/shopeeDashboard.service";
+import { getShopeeApiPerformance, ShopeeCredentials } from "@/server/modules/shopee/shopeeApiPerformance.service";
 import { getTikTokApiPerformance } from "@/server/modules/tiktok/tiktokApiPerformance.service";
 import { getGoogleAdsApiPerformance } from "@/server/modules/google-ads/googleAdsApiPerformance.service";
 import { getCompanyById } from "@/server/modules/company/company.repository";
 import { parseCompanyPlatforms } from "@/server/modules/company/companyPlatforms";
 import { OverviewCampaignRow, OverviewPlatformSummary, OverviewResponse } from "@/types/overview";
-import { ShopeeDashboardResponse } from "@/types/shopeeDashboard";
 import { ApiPerformanceResponse } from "@/types/apiPerformance";
 
 export async function getOverview(companyId: bigint): Promise<OverviewResponse> {
@@ -21,6 +20,17 @@ export async function getOverview(companyId: bigint): Promise<OverviewResponse> 
             ? { adAccountId: company.facebookAdAccountId, accessToken: company.facebookAccessToken }
             : null;
 
+    const shopeeCredentials: ShopeeCredentials | null =
+        company?.shopeeShopId && company?.shopeeAccessToken && company?.shopeeRefreshToken
+            ? {
+                  companyId,
+                  shopId: company.shopeeShopId,
+                  accessToken: company.shopeeAccessToken,
+                  refreshToken: company.shopeeRefreshToken,
+                  expiresAt: company.shopeeTokenExpiresAt,
+              }
+            : null;
+
     const tiktokCredentials =
         company?.tiktokAdvertiserId && company?.tiktokAccessToken
             ? { advertiserId: company.tiktokAdvertiserId, accessToken: company.tiktokAccessToken }
@@ -33,7 +43,7 @@ export async function getOverview(companyId: bigint): Promise<OverviewResponse> 
 
     const [facebook, shopee, tiktok, googleAds] = await Promise.all([
         getFacebookApiPerformance(facebookCredentials),
-        hasShopee ? getShopeeDashboardData(companyId, "month", {}) : Promise.resolve<ShopeeDashboardResponse | null>(null),
+        hasShopee ? getShopeeApiPerformance(shopeeCredentials) : Promise.resolve<ApiPerformanceResponse | null>(null),
         hasTikTok ? getTikTokApiPerformance(tiktokCredentials) : Promise.resolve<ApiPerformanceResponse | null>(null),
         hasGoogleAds ? getGoogleAdsApiPerformance(googleAdsCredentials) : Promise.resolve<ApiPerformanceResponse | null>(null),
     ]);
@@ -42,9 +52,9 @@ export async function getOverview(companyId: bigint): Promise<OverviewResponse> 
     const fbLeads = facebook.connected ? facebook.summary?.leads ?? 0 : 0;
     const fbRoas = facebook.connected ? facebook.summary?.roas ?? null : null;
 
-    const shopeeSpend = shopee?.hasData ? shopee.summary.spend : 0;
-    const shopeeRevenue = shopee?.hasData ? shopee.summary.revenue : null;
-    const shopeeRoas = shopee?.hasData ? shopee.summary.roas : null;
+    const shopeeSpend = shopee?.connected ? shopee.summary?.spend ?? 0 : 0;
+    const shopeeRevenue = shopee?.connected ? shopee.summary?.revenue ?? null : null;
+    const shopeeRoas = shopee?.connected ? shopee.summary?.roas ?? null : null;
 
     const tiktokSpend = tiktok?.connected ? tiktok.summary?.spend ?? 0 : 0;
     const tiktokLeads = tiktok?.connected ? tiktok.summary?.leads ?? 0 : 0;
@@ -85,12 +95,12 @@ export async function getOverview(companyId: bigint): Promise<OverviewResponse> 
                   id: "shopee",
                   name: "Shopee",
                   icon: "/icons/shopee.svg",
-                  sourceType: "csv",
-                  hasData: shopee?.hasData ?? false,
+                  sourceType: "api",
+                  hasData: shopee?.connected ?? false,
                   spend: shopeeSpend,
                   revenue: shopeeRevenue,
                   roas: shopeeRoas,
-                  statusLabel: shopee?.hasData ? `${shopee.importBatches.length} ไฟล์นำเข้า` : "ยังไม่มีไฟล์นำเข้า",
+                  statusLabel: shopee?.connected ? "เชื่อมต่อ API แล้ว" : shopee?.error ?? "ยังไม่ได้เชื่อมต่อ API",
               }
             : null,
         hasTikTok

@@ -98,6 +98,7 @@ export async function getFacebookApiPerformance(credentials: FacebookAdAccountCr
                 spend: totalSpend,
                 leads: totalLeads,
                 roas: avgRoas,
+                reach: totalReach,
             },
             campaigns: campaigns.map((campaign) => ({
                 id: campaign.id,

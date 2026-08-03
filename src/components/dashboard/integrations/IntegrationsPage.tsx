@@ -1,11 +1,12 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import type { ReactNode } from "react";
 import Image from "next/image";
-import { Building2, Check } from "lucide-react";
+import { Building2, Check, PlugZap, RefreshCw, Unplug, X } from "lucide-react";
 
 import { useFacebookApiPerformance } from "@/hooks/useFacebookApiPerformance";
-import { useShopeeDashboard } from "@/hooks/useShopeeDashboard";
+import { useShopeeApiPerformance } from "@/hooks/useShopeeApiPerformance";
 import { useTikTokApiPerformance } from "@/hooks/useTikTokApiPerformance";
 import { useGoogleAdsApiPerformance } from "@/hooks/useGoogleAdsApiPerformance";
 import { CompanyPlatformId } from "@/types/company";
@@ -23,9 +24,10 @@ interface PlatformCardProps {
     connected: boolean;
     detail: string;
     description: string;
+    action: ReactNode;
 }
 
-function PlatformCard({ name, icon, connected, detail, description }: PlatformCardProps) {
+function PlatformCard({ name, icon, connected, detail, description, action }: PlatformCardProps) {
     return (
         <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
             <div className="flex items-start justify-between gap-3">
@@ -40,9 +42,8 @@ function PlatformCard({ name, icon, connected, detail, description }: PlatformCa
                 </div>
 
                 <span
-                    className={`inline-flex shrink-0 items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium ring-1 ring-inset ${
-                        connected ? "bg-emerald-50 text-emerald-700 ring-emerald-200" : "bg-amber-50 text-amber-700 ring-amber-200"
-                    }`}
+                    className={`inline-flex shrink-0 items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium ring-1 ring-inset ${connected ? "bg-emerald-50 text-emerald-700 ring-emerald-200" : "bg-amber-50 text-amber-700 ring-amber-200"
+                        }`}
                 >
                     <span className={`h-1.5 w-1.5 rounded-full ${connected ? "bg-emerald-500" : "bg-amber-500"}`} />
                     {connected ? "เชื่อมต่อแล้ว" : "ยังไม่ได้เชื่อมต่อ"}
@@ -50,19 +51,79 @@ function PlatformCard({ name, icon, connected, detail, description }: PlatformCa
             </div>
 
             <p className="mt-3 text-xs text-slate-500">{description}</p>
+
+            <div className="mt-4">{action}</div>
         </div>
     );
 }
 
+function RetryButton({ label, loading, onClick }: { label: string; loading: boolean; onClick: () => void }) {
+    return (
+        <button
+            onClick={onClick}
+            disabled={loading}
+            className="flex items-center gap-2 rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-medium text-slate-600 transition-colors hover:border-indigo-200 hover:bg-indigo-50 hover:text-indigo-700 disabled:opacity-50"
+        >
+            <RefreshCw className={`h-3.5 w-3.5 ${loading ? "animate-spin" : ""}`} strokeWidth={2} />
+            {label}
+        </button>
+    );
+}
+
+const SHOPEE_STATUS_MESSAGES: Record<string, string> = {
+    connected: "เชื่อมต่อ Shopee สำเร็จแล้ว",
+};
+
+type CallbackBanner = { tone: "success" | "error"; message: string } | null;
+
+/** Reads the one-time OAuth-callback result out of the URL (e.g. `?shopee=connected`). */
+function getInitialCallbackBanner(): CallbackBanner {
+    if (typeof window === "undefined") return null;
+
+    const params = new URLSearchParams(window.location.search);
+    const shopeeStatus = params.get("shopee");
+    const googleAdsStatus = params.get("googleAds");
+    const facebookStatus = params.get("facebook")
+
+    if (shopeeStatus) {
+        const message = params.get("message");
+        return {
+            tone: shopeeStatus === "connected" ? "success" : "error",
+            message: message ?? SHOPEE_STATUS_MESSAGES[shopeeStatus] ?? "เชื่อมต่อ Shopee ไม่สำเร็จ",
+        };
+    }
+
+    if (googleAdsStatus) {
+        const message = params.get("message");
+        return {
+            tone: googleAdsStatus === "connected" ? "success" : "error",
+            message: message ?? "เชื่อมต่อ Google Ads ไม่สำเร็จ",
+        };
+    }
+
+    if (facebookStatus) {
+        const message = params.get("message");
+        return {
+            tone: facebookStatus === "connected" ? "success" : "error",
+            message: message ?? "เชื่อมต่อ Facebook ไม่สำเร็จ",
+        };
+    }
+
+    return null;
+}
+
 export default function IntegrationsPage() {
     const facebook = useFacebookApiPerformance();
-    const shopee = useShopeeDashboard();
+    const shopeeApi = useShopeeApiPerformance();
     const tiktok = useTikTokApiPerformance();
     const googleAds = useGoogleAdsApiPerformance();
 
     const [companies, setCompanies] = useState<Company[]>([]);
     const [selectedId, setSelectedId] = useState<string | null>(null);
     const [switching, setSwitching] = useState(false);
+    const [disconnecting, setDisconnecting] = useState(false);
+
+    const [callbackBanner, setCallbackBanner] = useState<CallbackBanner>(getInitialCallbackBanner);
 
     useEffect(() => {
         fetch("/api/company")
@@ -71,7 +132,21 @@ export default function IntegrationsPage() {
                 setCompanies(data.companies ?? []);
                 setSelectedId(data.selectedCompanyId ?? null);
             })
-            .catch(() => {});
+            .catch(() => { });
+    }, []);
+
+    // Strip the one-time OAuth-callback query params so a page refresh doesn't re-show the banner.
+    useEffect(() => {
+        const params = new URLSearchParams(window.location.search);
+        if (!params.has("shopee") && !params.has("googleAds") && !params.has("facebook")) return;
+
+        params.delete("shopee");
+        params.delete("message");
+        params.delete("view");
+        params.delete("googleAds");
+        params.delete("facebook");
+        const query = params.toString();
+        window.history.replaceState(null, "", query ? `${window.location.pathname}?${query}` : window.location.pathname);
     }, []);
 
     async function handleSwitch(companyId: string) {
@@ -92,11 +167,70 @@ export default function IntegrationsPage() {
         }
     }
 
+    async function handleShopeeDisconnect() {
+        if (disconnecting) return;
+        setDisconnecting(true);
+
+        try {
+            const response = await fetch("/api/integrations/shopee/disconnect", { method: "POST" });
+            const result = await response.json();
+
+            if (!response.ok) throw new Error(result.error ?? "ยกเลิกการเชื่อมต่อไม่สำเร็จ");
+
+            setCallbackBanner({ tone: "success", message: "ยกเลิกการเชื่อมต่อ Shopee แล้ว" });
+            await shopeeApi.refetch();
+        } catch (err) {
+            setCallbackBanner({ tone: "error", message: err instanceof Error ? err.message : "ยกเลิกการเชื่อมต่อไม่สำเร็จ" });
+        } finally {
+            setDisconnecting(false);
+        }
+    }
+
     const currentCompany = companies.find((c) => c.id === selectedId);
     const otherCompanies = companies.filter((c) => c.id !== selectedId);
     const platforms = currentCompany?.platforms ?? ["facebook", "shopee", "tiktok"];
 
-    const shopeeImportedAt = shopee.data?.importBatches[0]?.importedAt ?? null;
+    const [disconnectingGoogleAds, setDisconnectingGoogleAds] = useState(false);
+
+    async function handleGoogleAdsDisconnect() {
+        if (disconnectingGoogleAds) return;
+        setDisconnectingGoogleAds(true);
+
+        try {
+            const response = await fetch("/api/integrations/google-ads/disconnect", { method: "POST" });
+            const result = await response.json();
+
+            if (!response.ok) throw new Error(result.error ?? "ยกเลิกการเชื่อมต่อไม่สำเร็จ");
+
+            setCallbackBanner({ tone: "success", message: "ยกเลิกการเชื่อมต่อ Google Ads แล้ว" });
+            await googleAds.refetch();
+        } catch (err) {
+            setCallbackBanner({ tone: "error", message: err instanceof Error ? err.message : "ยกเลิกการเชื่อมต่อไม่สำเร็จ" });
+        } finally {
+            setDisconnectingGoogleAds(false);
+        }
+    }
+
+    const [disconnectingFacebook, setDisconnectingFacebook] = useState(false);
+
+    async function handleFacebookDisconnect() {
+        if (disconnectingFacebook) return;
+        setDisconnectingFacebook(true);
+
+        try {
+            const response = await fetch("/api/integrations/facebook/disconnect", { method: "POST" });
+            const result = await response.json();
+
+            if (!response.ok) throw new Error(result.error ?? "ยกเลิกการเชื่อมต่อไม่สำเร็จ");
+
+            setCallbackBanner({ tone: "success", message: "ยกเลิกการเชื่อมต่อ Facebook แล้ว" });
+            await facebook.refetch();
+        } catch (err) {
+            setCallbackBanner({ tone: "error", message: err instanceof Error ? err.message : "ยกเลิกการเชื่อมต่อไม่สำเร็จ" });
+        } finally {
+            setDisconnectingFacebook(false);
+        }
+    }
 
     return (
         <div className="space-y-6">
@@ -107,17 +241,55 @@ export default function IntegrationsPage() {
                 </p>
             </div>
 
+            {callbackBanner && (
+                <div
+                    className={`flex items-start justify-between gap-3 rounded-xl border px-4 py-3 text-sm ${callbackBanner.tone === "success"
+                        ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+                        : "border-red-200 bg-red-50 text-red-700"
+                        }`}
+                >
+                    <span>{callbackBanner.message}</span>
+                    <button onClick={() => setCallbackBanner(null)} className="shrink-0 opacity-60 hover:opacity-100">
+                        <X className="h-4 w-4" strokeWidth={2} />
+                    </button>
+                </div>
+            )}
+
             <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
                 {platforms.includes("facebook") && (
                     <PlatformCard
                         name="Facebook"
                         icon="/icons/facebook.svg"
                         connected={facebook.data?.connected ?? false}
-                        detail={facebook.data?.connected ? "Facebook Ads API" : "ยังไม่ได้ตั้งค่า"}
+                        detail={facebook.data?.connected ? "Facebook Ads API" : "ยังไม่ได้เชื่อมต่อ"}
                         description={
                             facebook.data?.connected
-                                ? "ดึงข้อมูลแคมเปญและยอดใช้จ่ายโฆษณาโดยตรงจาก Facebook Ads API"
-                                : facebook.data?.error ?? "ยังไม่ได้ตั้งค่า Ad Account สำหรับบริษัทนี้"
+                                ? `ดึงข้อมูลแคมเปญและยอดใช้จ่ายโฆษณาโดยตรงจาก Facebook Ads API${facebook.data.lastSyncedAt ? ` · ซิงค์ล่าสุด ${new Date(facebook.data.lastSyncedAt).toLocaleString("th-TH")}` : ""
+                                }`
+                                : facebook.data?.error ?? "ยังไม่ได้เชื่อมต่อ Facebook กับบัญชีนี้"
+                        }
+                        action={
+                            facebook.data?.connected ? (
+                                <div className="flex items-center gap-2">
+                                    <RetryButton label="ซิงค์ข้อมูลใหม่" loading={facebook.loading} onClick={facebook.refetch} />
+                                    <button
+                                        onClick={handleFacebookDisconnect}
+                                        disabled={disconnectingFacebook}
+                                        className="flex items-center gap-1.5 rounded-lg border border-red-200 px-3 py-1.5 text-xs font-medium text-red-600 transition-colors hover:bg-red-50 disabled:opacity-50"
+                                    >
+                                        <Unplug className="h-3.5 w-3.5" strokeWidth={2} />
+                                        ยกเลิกการเชื่อมต่อ
+                                    </button>
+                                </div>
+                            ) : (
+
+                                <a href="/api/integrations/facebook/connect"
+                                    className="flex w-fit items-center gap-2 rounded-lg bg-blue-500 px-3 py-1.5 text-xs font-medium text-white shadow-sm transition-colors hover:bg-blue-600"
+                                >
+                                    <PlugZap className="h-3.5 w-3.5" strokeWidth={2} />
+                                    เชื่อมต่อ Facebook
+                                </a>
+                            )
                         }
                     />
                 )}
@@ -126,14 +298,36 @@ export default function IntegrationsPage() {
                     <PlatformCard
                         name="Shopee"
                         icon="/icons/shopee.svg"
-                        connected={shopee.data?.hasData ?? false}
-                        detail={shopee.data?.hasData ? `${shopee.data.importBatches.length} ไฟล์ที่นำเข้าแล้ว` : "ยังไม่มีไฟล์นำเข้า"}
+                        connected={shopeeApi.data?.connected ?? false}
+                        detail={shopeeApi.data?.connected ? "Shopee Open API" : "ยังไม่ได้เชื่อมต่อ"}
                         description={
-                            shopee.data?.hasData
-                                ? `ข้อมูลยอดขายและโฆษณาจากไฟล์ CSV ที่นำเข้า · ล่าสุด ${
-                                      shopeeImportedAt ? new Date(shopeeImportedAt).toLocaleDateString("th-TH") : "-"
-                                  }`
-                                : "นำเข้าไฟล์รายงานจากหน้า Dashboard > Shopee เพื่อเริ่มดูข้อมูล"
+                            shopeeApi.data?.connected
+                                ? `ดึงข้อมูลออเดอร์จากร้าน Shopee โดยตรงผ่าน Shopee Open API${shopeeApi.data.lastSyncedAt ? ` · ซิงค์ล่าสุด ${new Date(shopeeApi.data.lastSyncedAt).toLocaleString("th-TH")}` : ""
+                                }`
+                                : shopeeApi.data?.error ?? "ยังไม่ได้เชื่อมต่อ Shopee กับบัญชีนี้"
+                        }
+                        action={
+                            shopeeApi.data?.connected ? (
+                                <div className="flex items-center gap-2">
+                                    <RetryButton label="ซิงค์ข้อมูลใหม่" loading={shopeeApi.loading} onClick={shopeeApi.refetch} />
+                                    <button
+                                        onClick={handleShopeeDisconnect}
+                                        disabled={disconnecting}
+                                        className="flex items-center gap-1.5 rounded-lg border border-red-200 px-3 py-1.5 text-xs font-medium text-red-600 transition-colors hover:bg-red-50 disabled:opacity-50"
+                                    >
+                                        <Unplug className="h-3.5 w-3.5" strokeWidth={2} />
+                                        ยกเลิกการเชื่อมต่อ
+                                    </button>
+                                </div>
+                            ) : (
+                                <a
+                                    href="/api/integrations/shopee/connect"
+                                    className="flex w-fit items-center gap-2 rounded-lg bg-orange-500 px-3 py-1.5 text-xs font-medium text-white shadow-sm transition-colors hover:bg-orange-600"
+                                >
+                                    <PlugZap className="h-3.5 w-3.5" strokeWidth={2} />
+                                    เชื่อมต่อ Shopee
+                                </a>
+                            )
                         }
                     />
                 )}
@@ -149,6 +343,13 @@ export default function IntegrationsPage() {
                                 ? "ดึงข้อมูลแคมเปญและยอดใช้จ่ายโฆษณาโดยตรงจาก TikTok Ads API"
                                 : tiktok.data?.error ?? "ยังไม่ได้ตั้งค่า Advertiser ID สำหรับบริษัทนี้"
                         }
+                        action={
+                            <RetryButton
+                                label={tiktok.data?.connected ? "ซิงค์ข้อมูลใหม่" : "ลองเชื่อมต่ออีกครั้ง"}
+                                loading={tiktok.loading}
+                                onClick={tiktok.refetch}
+                            />
+                        }
                     />
                 )}
 
@@ -157,11 +358,35 @@ export default function IntegrationsPage() {
                         name="Google Ads"
                         icon="/icons/google-ads.svg"
                         connected={googleAds.data?.connected ?? false}
-                        detail={googleAds.data?.connected ? "Google Ads API" : "ยังไม่ได้ตั้งค่า"}
+                        detail={googleAds.data?.connected ? "Google Ads API" : "ยังไม่ได้เชื่อมต่อ"}
                         description={
                             googleAds.data?.connected
-                                ? "ดึงข้อมูลแคมเปญและยอดใช้จ่ายโฆษณาโดยตรงจาก Google Ads API"
-                                : googleAds.data?.error ?? "ยังไม่ได้ตั้งค่า Customer ID สำหรับบริษัทนี้"
+                                ? `ดึงข้อมูลแคมเปญและยอดใช้จ่ายโฆษณาโดยตรงจาก Google Ads API${googleAds.data.lastSyncedAt ? ` · ซิงค์ล่าสุด ${new Date(googleAds.data.lastSyncedAt).toLocaleString("th-TH")}` : ""
+                                }`
+                                : googleAds.data?.error ?? "ยังไม่ได้เชื่อมต่อ Google Ads กับบัญชีนี้"
+                        }
+                        action={
+                            googleAds.data?.connected ? (
+                                <div className="flex items-center gap-2">
+                                    <RetryButton label="ซิงค์ข้อมูลใหม่" loading={googleAds.loading} onClick={googleAds.refetch} />
+                                    <button
+                                        onClick={handleGoogleAdsDisconnect}
+                                        disabled={disconnectingGoogleAds}
+                                        className="flex items-center gap-1.5 rounded-lg border border-red-200 px-3 py-1.5 text-xs font-medium text-red-600 transition-colors hover:bg-red-50 disabled:opacity-50"
+                                    >
+                                        <Unplug className="h-3.5 w-3.5" strokeWidth={2} />
+                                        ยกเลิกการเชื่อมต่อ
+                                    </button>
+                                </div>
+                            ) : (
+
+                                <a href="/api/integrations/google-ads/connect"
+                                    className="flex w-fit items-center gap-2 rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-medium text-white shadow-sm transition-colors hover:bg-blue-700"
+                                >
+                                    <PlugZap className="h-3.5 w-3.5" strokeWidth={2} />
+                                    เชื่อมต่อ Google Ads
+                                </a>
+                            )
                         }
                     />
                 )}

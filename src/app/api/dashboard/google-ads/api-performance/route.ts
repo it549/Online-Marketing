@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getGoogleAdsApiPerformance } from "@/server/modules/google-ads/googleAdsApiPerformance.service";
+import { getGoogleAdsApiPerformance } from "@/server/modules/google-ads/googleAds.service";
 import { requireAdmin } from "@/server/core/auth/api-guard";
 import { getSelectedCompanyId } from "@/server/core/company/selectedCompany";
 import { getCompanyById } from "@/server/modules/company/company.repository";

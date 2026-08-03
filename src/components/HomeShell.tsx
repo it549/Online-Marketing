@@ -19,6 +19,15 @@ import { CompanyPlatformId } from "@/types/company";
 
 type View = "overview" | "facebook" | "shopee" | "tiktok" | "googleads" | "campaigns" | "integrations" | "content" | "adplan";
 
+const VALID_VIEWS: View[] = ["overview", "facebook", "shopee", "tiktok", "googleads", "campaigns", "integrations", "content", "adplan"];
+
+/** Lets a redirect back from an OAuth callback (e.g. `?view=integrations`) land on the right tab. */
+function getInitialView(): View {
+    if (typeof window === "undefined") return "overview";
+    const requested = new URLSearchParams(window.location.search).get("view");
+    return VALID_VIEWS.includes(requested as View) ? (requested as View) : "overview";
+}
+
 const PLATFORM_NAV: Record<CompanyPlatformId, { id: View; label: string; icon: string }> = {
     facebook: { id: "facebook", label: "Facebook", icon: "/icons/facebook.svg" },
     shopee: { id: "shopee", label: "Shopee", icon: "/icons/shopee.svg" },
@@ -43,7 +52,7 @@ interface Props {
 }
 
 export default function HomeShell({ userEmail }: Props) {
-    const [activeView, setActiveView] = useState<View>("overview");
+    const [activeView, setActiveView] = useState<View>(getInitialView);
     const [dashboardExpanded, setDashboardExpanded] = useState(true);
     const { company } = useSelectedCompany();
 
