@@ -1,4 +1,4 @@
-export type AiInsightsSource = "api" | "imported";
+export type AiInsightsSource = "api" | "imported" | "synced";
 
 export interface AiInsightsResponse {
     generatedAt: string;

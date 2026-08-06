@@ -1,9 +1,10 @@
+import { Prisma } from "@prisma/client";
 import { prisma, } from "@/server/database/prisma";
 import { NormalizedImportResult, } from "./import.types";
 
 export async function saveImportResult(result: NormalizedImportResult, fileName: string, companyId: bigint,) {
     return prisma.$transaction(
-        async (tx: any) => {
+        async (tx: Prisma.TransactionClient) => {
             const platform = await tx.platform.upsert({
                 where: { code: result.platformCode, },
                 update: {},
@@ -24,6 +25,7 @@ export async function saveImportResult(result: NormalizedImportResult, fileName:
                     companyId,
                     platformId: platform.id,
                     status: "COMPLETED",
+                    source: "CSV",
                     reportStartDate: { lte: result.report.reportEndDate, },
                     reportEndDate: { gte: result.report.reportStartDate, },
                 },

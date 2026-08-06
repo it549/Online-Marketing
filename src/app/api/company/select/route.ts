@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getCompanyById } from "@/server/modules/company/company.repository";
+import { requireCompany } from "@/server/modules/company/company.service";
 import { SELECTED_COMPANY_COOKIE } from "@/server/core/company/selectedCompany";
 import { requireAdmin } from "@/server/core/auth/api-guard";
 
@@ -17,10 +17,14 @@ export async function POST(request: NextRequest) {
             return NextResponse.json({ error: "companyId is required" }, { status: 400 });
         }
 
-        const company = await getCompanyById(BigInt(companyId));
-
-        if (!company) {
-            return NextResponse.json({ error: "ไม่พบบริษัทนี้" }, { status: 404 });
+        let company;
+        try {
+            company = await requireCompany(BigInt(companyId));
+        } catch (error) {
+            if (error instanceof Error && error.message === "Company not found") {
+                return NextResponse.json({ error: "ไม่พบบริษัทนี้" }, { status: 404 });
+            }
+            throw error;
         }
 
         const response = NextResponse.json({ success: true });

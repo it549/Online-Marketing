@@ -29,7 +29,7 @@ export function useGoogleAdsApiPerformance() {
     }, []);
 
     useEffect(() => {
-        fetchData();
+        void Promise.resolve().then(fetchData);
     }, [fetchData]);
 
     return { data, loading, error, refetch: fetchData };

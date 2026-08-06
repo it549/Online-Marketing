@@ -1,8 +1,17 @@
 import { ApiPerformanceResponse } from "@/types/apiPerformance";
+import { getCompanyById } from "@/server/modules/company/company.repository";
 
 export interface TikTokAdsCredentials {
     advertiserId: string;
     accessToken: string;
+}
+
+export async function getTikTokApiPerformanceForCompany(companyId: bigint): Promise<ApiPerformanceResponse> {
+    const company = await getCompanyById(companyId);
+    const credentials = company?.tiktokAdvertiserId && company.tiktokAccessToken
+        ? { advertiserId: company.tiktokAdvertiserId, accessToken: company.tiktokAccessToken }
+        : null;
+    return getTikTokApiPerformance(credentials);
 }
 
 /**

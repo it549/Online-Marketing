@@ -53,6 +53,7 @@ export default function FacebookImportedAnalytics() {
                             columns: [
                                 { key: "name", label: "โพสต์" },
                                 { key: "postType", label: "ประเภท", align: "center" },
+                                { key: "advertised", label: "โฆษณา", align: "center" },
                                 { key: "reach", label: "Reach", align: "right" },
                                 { key: "views", label: "ยอดดู", align: "right" },
                                 { key: "engagement", label: "Engagement", align: "right" },
@@ -61,6 +62,7 @@ export default function FacebookImportedAnalytics() {
                                 id: post.id,
                                 name: truncateTitle(post.title),
                                 postType: post.postType,
+                                advertised: post.isAdvertised ? "✓ มีโฆษณา" : "ออร์แกนิก",
                                 reach: post.reach.toLocaleString(),
                                 views: post.views.toLocaleString(),
                                 engagement: post.engagement.toLocaleString(),
@@ -80,6 +82,13 @@ function buildMetrics(data: FacebookContentDashboardResponse): DashboardMetric[]
         { id: "reactions", label: "การกดใจรวม", value: data.totalReactions.toLocaleString(), subtitle: "Reactions", color: "text-pink-600" },
         { id: "engagement", label: "Engagement รวม", value: data.totalEngagement.toLocaleString(), subtitle: "กดใจ + คอมเมนต์ + แชร์", color: "text-green-600" },
         { id: "posts", label: "จำนวนโพสต์", value: data.totalPosts.toLocaleString(), subtitle: "ทั้งหมด", color: "text-purple-600" },
+        {
+            id: "advertised",
+            label: "โพสต์ที่มีโฆษณา",
+            value: data.totalAdvertisedPosts.toLocaleString(),
+            subtitle: `จาก ${data.totalPosts.toLocaleString()} โพสต์`,
+            color: "text-orange-600",
+        },
     ];
 }
 

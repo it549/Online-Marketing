@@ -9,6 +9,7 @@ export interface FacebookContentPostSummary {
     comments: number;
     shares: number;
     engagement: number;
+    isAdvertised: boolean;
 }
 
 export interface FacebookContentTypeBreakdown {
@@ -33,6 +34,7 @@ export interface FacebookContentDashboardResponse {
     totalViews: number;
     totalReactions: number;
     totalEngagement: number;
+    totalAdvertisedPosts: number;
     posts: FacebookContentPostSummary[];
     breakdown: FacebookContentTypeBreakdown[];
     importBatches: FacebookContentImportBatch[];

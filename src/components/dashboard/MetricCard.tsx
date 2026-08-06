@@ -27,6 +27,7 @@ const ICON_BY_ID: Record<string, LucideIcon> = {
     profit: Wallet,
     roas: Percent,
     orders: ShoppingCart,
+    purchases: ShoppingCart,
     ctr: MousePointerClick,
     impressions: Eye,
     reach: Users,

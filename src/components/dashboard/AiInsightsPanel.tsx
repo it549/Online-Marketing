@@ -6,6 +6,7 @@ import { AiInsightsSource } from "@/types/aiInsights";
 const SOURCE_LABELS: Record<AiInsightsSource, string> = {
     api: "API Performance",
     imported: "Imported Analytics",
+    synced: "ข้อมูลซิงค์อัตโนมัติ (ETL)",
 };
 
 interface Props {

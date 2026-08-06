@@ -31,7 +31,7 @@ export function useFacebookContentAnalytics() {
     }, [importJobId]);
 
     useEffect(() => {
-        fetchData();
+        void Promise.resolve().then(fetchData);
     }, [fetchData]);
 
     return { data, loading, error, importJobId, setImportJobId, refetch: fetchData };

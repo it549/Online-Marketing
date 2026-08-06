@@ -4,6 +4,15 @@ import { googleAdsClient } from "./client";
 import { CAMPAIGN_PERFORMANCE_QUERY } from "./googleAds.repository";
 import { GoogleAdsCredentials } from "@/types/googleAds";
 import { emptyPerformanceResponse, mapCampaignRowsToPerformance } from "./googleAds.mapper";
+import { getCompanyById } from "@/server/modules/company/company.repository";
+
+export async function getGoogleAdsApiPerformanceForCompany(companyId: bigint): Promise<ApiPerformanceResponse> {
+    const company = await getCompanyById(companyId);
+    const credentials = company?.googleAdsCustomerId && company.googleAdsRefreshToken
+        ? { customerId: company.googleAdsCustomerId, refreshToken: company.googleAdsRefreshToken }
+        : null;
+    return getGoogleAdsApiPerformance(credentials);
+}
 
 export async function getGoogleAdsApiPerformance(
     credentials: GoogleAdsCredentials | null

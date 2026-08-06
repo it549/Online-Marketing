@@ -24,6 +24,12 @@ const configurationEnvShema = z.object({
     FACEBOOK_APP_ID: z.string().min(1),
     FACEBOOK_APP_SECRET: z.string().min(1),
     FACEBOOK_REDIRECT_URL: z.url(),
+
+    CRON_SECRET: z.string().min(1),
+
+    TIKTOK_APP_ID: z.string().optional(),
+    TIKTOK_APP_SECRET: z.string().optional(),
+    TIKTOK_REDIRECT_URL: z.url().optional(),
 });
 
 const env = configurationEnvShema.parse(process.env);
@@ -54,5 +60,14 @@ export const config = {
         develoerToken: env.DEVELOPER_TOKEN,
         customerID: env.CUSTOMER_ID,
         redirectUrl: env.GOOGLE_ADS_REDIRECT_URL,
-    }
+    },
+
+    cron: {
+        secret: env.CRON_SECRET,
+    },
+    tiktok: {
+        appId: env.TIKTOK_APP_ID,
+        appSecret: env.TIKTOK_APP_SECRET,
+        redirectUrl: env.TIKTOK_REDIRECT_URL,
+    },
 } as const;

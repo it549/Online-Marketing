@@ -2,21 +2,31 @@ import { Activity, FileText, Sparkles } from "lucide-react";
 
 export type PlatformSubTab = "api" | "imported" | "ai";
 
-const TABS: { id: PlatformSubTab; label: string; icon: typeof Activity }[] = [
+export interface SubTabDef<T extends string> {
+    id: T;
+    label: string;
+    icon: typeof Activity;
+}
+
+const DEFAULT_TABS: SubTabDef<PlatformSubTab>[] = [
     { id: "api", label: "API Performance", icon: Activity },
     { id: "imported", label: "Imported Analytics", icon: FileText },
     { id: "ai", label: "AI Insights", icon: Sparkles },
 ];
 
-interface Props {
-    value: PlatformSubTab;
-    onChange: (tab: PlatformSubTab) => void;
+interface Props<T extends string> {
+    value: T;
+    onChange: (tab: T) => void;
+    /** Defaults to the original api/imported/ai set, so existing callers are unaffected. */
+    tabs?: SubTabDef<T>[];
 }
 
-export default function PlatformSubTabs({ value, onChange }: Props) {
+export default function PlatformSubTabs<T extends string = PlatformSubTab>({ value, onChange, tabs }: Props<T>) {
+    const resolvedTabs = tabs ?? (DEFAULT_TABS as unknown as SubTabDef<T>[]);
+
     return (
         <div className="inline-flex items-center gap-1 rounded-xl bg-slate-100 p-1">
-            {TABS.map((tab) => {
+            {resolvedTabs.map((tab) => {
                 const Icon = tab.icon;
                 const active = value === tab.id;
 

@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getFacebookContentAnalytics } from "@/server/modules/facebook-content/facebookContentAnalytics.service";
+import { getFacebookContentAnalytics } from "@/server/modules/facebook/content/facebookContentAnalytics.service";
 import { requireAdmin } from "@/server/core/auth/api-guard";
 import { getSelectedCompanyId } from "@/server/core/company/selectedCompany";
 

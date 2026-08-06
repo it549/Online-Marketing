@@ -43,7 +43,7 @@ export function useShopeeDashboard() {
     }, [period, filters]);
 
     useEffect(() => {
-        fetchDashboard();
+        void Promise.resolve().then(fetchDashboard);
     }, [fetchDashboard]);
 
     return {

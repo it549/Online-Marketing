@@ -9,6 +9,11 @@ type Props =
           source: "imported";
           fileCount: number;
           latestImportedAt: string | null;
+      }
+    | {
+          source: "synced";
+          hasSyncedBefore: boolean;
+          lastSyncedAt: string | null;
       };
 
 function formatDateTime(value: string | null): string | null {
@@ -43,15 +48,31 @@ export default function DataSourceBadge(props: Props) {
         );
     }
 
-    const imported = formatDateTime(props.latestImportedAt);
+    if (props.source === "imported") {
+        const imported = formatDateTime(props.latestImportedAt);
+
+        return (
+            <div className="flex flex-wrap items-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs text-emerald-700">
+                <span className="rounded-full bg-emerald-100 px-2 py-0.5 font-semibold text-emerald-700">แหล่งข้อมูล: ไฟล์นำเข้า (CSV)</span>
+
+                <span>{props.fileCount} ไฟล์ที่นำเข้าแล้ว</span>
+
+                {imported && <span className="text-emerald-500">· ล่าสุด {imported}</span>}
+            </div>
+        );
+    }
+
+    const synced = formatDateTime(props.lastSyncedAt);
 
     return (
-        <div className="flex flex-wrap items-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs text-emerald-700">
-            <span className="rounded-full bg-emerald-100 px-2 py-0.5 font-semibold text-emerald-700">แหล่งข้อมูล: ไฟล์นำเข้า (CSV)</span>
+        <div className="flex flex-wrap items-center gap-2 rounded-xl border border-violet-200 bg-violet-50 px-3 py-2 text-xs text-violet-700">
+            <span className="rounded-full bg-violet-100 px-2 py-0.5 font-semibold text-violet-700">แหล่งข้อมูล: ซิงค์อัตโนมัติ (ETL)</span>
 
-            <span>{props.fileCount} ไฟล์ที่นำเข้าแล้ว</span>
-
-            {imported && <span className="text-emerald-500">· ล่าสุด {imported}</span>}
+            {props.hasSyncedBefore ? (
+                synced && <span>ซิงค์ล่าสุด {synced}</span>
+            ) : (
+                <span className="text-amber-600">ยังไม่เคยซิงค์ข้อมูล</span>
+            )}
         </div>
     );
 }

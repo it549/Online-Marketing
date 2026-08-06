@@ -2,8 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getSessionFromRequest } from "@/server/core/auth/api-guard";
 import { getSelectedCompanyId } from "@/server/core/company/selectedCompany";
 import { absoluteUrl } from "@/server/core/http/appUrl";
-import { saveShopeeCredentials } from "@/server/modules/company/company.repository";
-import { exchangeShopeeCode } from "@/server/modules/shopee/shopeeAuth.service";
+import { connectShopeeAccount } from "@/server/modules/shopee/shopeeAuth.service";
 
 function redirectToIntegrations(request: NextRequest, status: "connected" | "error", message?: string) {
     const url = absoluteUrl("/", request);
@@ -31,9 +30,7 @@ export async function GET(request: NextRequest) {
 
     try {
         const companyId = await getSelectedCompanyId(request);
-        const token = await exchangeShopeeCode(code, shopId);
-
-        await saveShopeeCredentials(companyId, token);
+        await connectShopeeAccount(companyId, code, shopId);
 
         return redirectToIntegrations(request, "connected");
     } catch (error) {

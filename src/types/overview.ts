@@ -1,3 +1,5 @@
+import type { LeadsSummary, SpendTrendPoint } from "./insights";
+
 export type OverviewPlatformId = "facebook" | "shopee" | "tiktok" | "googleAds";
 
 export interface OverviewPlatformSummary {
@@ -35,4 +37,12 @@ export interface OverviewResponse {
     totals: OverviewTotals;
     platforms: OverviewPlatformSummary[];
     topCampaigns: OverviewCampaignRow[];
+}
+
+export interface OverviewInsightResponse {
+    hasSyncedBefore: boolean;
+    hasDataInRange: boolean;
+    points: SpendTrendPoint[];
+    leadsSummary: LeadsSummary;
+    lastSyncedAt: string | null;
 }

@@ -3,3 +3,5 @@ function test() {
         console.log("Hello");
     }
 }
+
+void test;

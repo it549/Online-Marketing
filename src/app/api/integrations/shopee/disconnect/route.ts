@@ -1,15 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireAdmin } from "@/server/core/auth/api-guard";
 import { getSelectedCompanyId } from "@/server/core/company/selectedCompany";
-import { clearShopeeCredentials } from "@/server/modules/company/company.repository";
+import { disconnectShopeeAccount } from "@/server/modules/shopee/shopeeAuth.service";
 
 export async function POST(request: NextRequest) {
     const guard = requireAdmin(request);
     if (guard.response) return guard.response;
 
     try {
-        const companyId = await getSelectedCompanyId(request);
-        await clearShopeeCredentials(companyId);
+        await disconnectShopeeAccount(await getSelectedCompanyId(request));
         return NextResponse.json({ ok: true });
     } catch (error) {
         return NextResponse.json(

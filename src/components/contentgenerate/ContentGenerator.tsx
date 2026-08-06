@@ -32,15 +32,18 @@ export default function ContentGenerator() {
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ service, platform, tone, extra }),
         });
-        const text = await res.text();
-        let data: any = {};
         try {
-            data = JSON.parse(text);
-        } catch {
-            data = { error: text.slice(0, 200) };
+            const text = await res.text();
+            let data: { content?: string; error?: string } = {};
+            try {
+                data = JSON.parse(text) as { content?: string; error?: string };
+            } catch {
+                data = { error: text.slice(0, 200) };
+            }
+            setResult(data.content || data.error || "เกิดข้อผิดพลาด");
+        } finally {
+            setLoading(false);
         }
-        setResult(data.content || data.error || "เกิดข้อผิดพลาด");
-        setLoading(false);
     };
 
     const copy = () => navigator.clipboard.writeText(result);

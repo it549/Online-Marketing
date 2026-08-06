@@ -1,7 +1,7 @@
 import { ContentPlatformCode, NormalizedContentImportResult } from "./content-import.types";
 import { validateContentImportResult } from "./content-import.validator";
-import { parseFacebookContentCsv } from "@/server/modules/facebook-content/facebookContent.csv.parser";
-import { normalizeFacebookContentRows } from "@/server/modules/facebook-content/facebookContent.adapter";
+import { parseFacebookContentCsv } from "@/server/modules/facebook/content/facebookContent.csv.parser";
+import { normalizeFacebookContentRows } from "@/server/modules/facebook/content/facebookContent.adapter";
 
 interface ImportContentCsvInput {
     platformCode: ContentPlatformCode;

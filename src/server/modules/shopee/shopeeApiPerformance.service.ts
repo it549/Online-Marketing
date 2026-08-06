@@ -1,8 +1,25 @@
 import { config } from "@/server/configurations/config";
 import { ApiPerformanceResponse } from "@/types/apiPerformance";
-import { saveShopeeCredentials } from "@/server/modules/company/company.repository";
-import { ShopeeApiError, refreshShopeeAccessToken } from "./shopeeAuth.service";
+import { ShopeeApiError, ensureValidAccessToken, type ShopeeCredentials } from "./shopeeAuth.service";
 import { shopeeTimestamp, signShopeeRequest } from "./shopeeSign";
+import { getCompanyById } from "@/server/modules/company/company.repository";
+
+export type { ShopeeCredentials } from "./shopeeAuth.service";
+
+export async function getShopeeApiPerformanceForCompany(companyId: bigint): Promise<ApiPerformanceResponse> {
+    const company = await getCompanyById(companyId);
+    const credentials: ShopeeCredentials | null =
+        company?.shopeeShopId && company.shopeeAccessToken && company.shopeeRefreshToken
+            ? {
+                  companyId,
+                  shopId: company.shopeeShopId,
+                  accessToken: company.shopeeAccessToken,
+                  refreshToken: company.shopeeRefreshToken,
+                  expiresAt: company.shopeeTokenExpiresAt,
+              }
+            : null;
+    return getShopeeApiPerformance(credentials);
+}
 
 // Shopee's ads performance APIs cap the range at 1 calendar month, counted inclusively
 // (00:00:00 of start_date through 23:59:59 of end_date) -- a naive 30-day subtraction
@@ -21,22 +38,14 @@ const AD_TYPE_LABEL_TH: Record<string, string> = {
     manual: "กำหนดเอง",
 };
 
-export interface ShopeeCredentials {
-    companyId: bigint;
-    shopId: string;
-    accessToken: string;
-    refreshToken: string;
-    expiresAt: Date | null;
-}
-
-interface ShopeeApiEnvelope {
+export interface ShopeeApiEnvelope {
     error?: string;
     message?: string;
     response?: Record<string, unknown>;
     warning?: string;
 }
 
-async function shopeeShopGet(path: string, shopId: string, accessToken: string, params: Record<string, string> = {}): Promise<ShopeeApiEnvelope> {
+export async function shopeeShopGet(path: string, shopId: string, accessToken: string, params: Record<string, string> = {}): Promise<ShopeeApiEnvelope> {
     const timestamp = shopeeTimestamp();
     const sign = signShopeeRequest(path, timestamp, { accessToken, shopId });
 
@@ -56,16 +65,6 @@ async function shopeeShopGet(path: string, shopId: string, accessToken: string, 
     }
 
     return body;
-}
-
-/** Refreshes the access token if it's expired/near-expiry and persists the new pair to the DB. */
-async function ensureValidAccessToken(credentials: ShopeeCredentials): Promise<string> {
-    const nearExpiry = !credentials.expiresAt || credentials.expiresAt.getTime() - Date.now() < 5 * 60 * 1000;
-    if (!nearExpiry) return credentials.accessToken;
-
-    const refreshed = await refreshShopeeAccessToken(credentials.shopId, credentials.refreshToken);
-    await saveShopeeCredentials(credentials.companyId, refreshed);
-    return refreshed.accessToken;
 }
 
 /** Shopee's ads APIs take dates as DD-MM-YYYY, unlike the order API's unix timestamps. */

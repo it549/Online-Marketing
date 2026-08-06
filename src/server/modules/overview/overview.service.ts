@@ -4,8 +4,10 @@ import { getTikTokApiPerformance } from "@/server/modules/tiktok/tiktokApiPerfor
 import { getGoogleAdsApiPerformance } from "@/server/modules/google-ads/googleAdsApiPerformance.service";
 import { getCompanyById } from "@/server/modules/company/company.repository";
 import { parseCompanyPlatforms } from "@/server/modules/company/companyPlatforms";
-import { OverviewCampaignRow, OverviewPlatformSummary, OverviewResponse } from "@/types/overview";
+import { getSpendTrend, getLeadsSummaryOnly } from "@/server/modules/insights/insights.service";
+import { OverviewCampaignRow, OverviewInsightResponse, OverviewPlatformSummary, OverviewResponse } from "@/types/overview";
 import { ApiPerformanceResponse } from "@/types/apiPerformance";
+import type { SpendTrendPoint } from "@/types/insights";
 
 export async function getOverview(companyId: bigint): Promise<OverviewResponse> {
     const company = await getCompanyById(companyId);
@@ -151,5 +153,48 @@ export async function getOverview(companyId: bigint): Promise<OverviewResponse> 
         },
         platforms: platformsResult,
         topCampaigns,
+    };
+}
+
+/**
+ * Combines the per-platform daily ETL trend (already used by the Insights page) across every
+ * connected platform into one series, plus a cross-platform leads summary -- the real, date-ranged
+ * data the homepage "AI Command Center" needs to compute genuine period-over-period deltas
+ * (via summarizeTrend) instead of a live, non-date-ranged snapshot like getOverview() returns.
+ */
+export async function getOverviewInsight(companyId: bigint, dateFrom: Date, dateTo: Date): Promise<OverviewInsightResponse> {
+    const company = await getCompanyById(companyId);
+    const platforms = parseCompanyPlatforms(company?.platforms);
+
+    const [trends, leadsSummary] = await Promise.all([
+        Promise.all(platforms.map((platform) => getSpendTrend(companyId, platform, dateFrom, dateTo))),
+        getLeadsSummaryOnly(companyId, undefined, dateFrom, dateTo),
+    ]);
+
+    const byDate = new Map<string, SpendTrendPoint>();
+    for (const trend of trends) {
+        for (const point of trend.points) {
+            const existing = byDate.get(point.date);
+            if (existing) {
+                existing.impressions += point.impressions;
+                existing.clicks += point.clicks;
+                existing.spend += point.spend;
+                existing.conversions += point.conversions;
+                existing.conversionsValue += point.conversionsValue;
+            } else {
+                byDate.set(point.date, { ...point });
+            }
+        }
+    }
+
+    const points = Array.from(byDate.values()).sort((a, b) => a.date.localeCompare(b.date));
+    const lastSyncedTimes = trends.map((t) => t.lastSyncedAt).filter((v): v is string => v !== null);
+
+    return {
+        hasSyncedBefore: trends.some((t) => t.hasSyncedBefore),
+        hasDataInRange: points.length > 0,
+        points,
+        leadsSummary: leadsSummary.summary,
+        lastSyncedAt: lastSyncedTimes.length > 0 ? lastSyncedTimes.sort().at(-1)! : null,
     };
 }

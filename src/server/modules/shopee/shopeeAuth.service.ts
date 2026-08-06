@@ -1,7 +1,17 @@
 import { config } from "@/server/configurations/config";
+import { clearShopeeCredentials, getCompanyById, saveShopeeCredentials } from "@/server/modules/company/company.repository";
+import { parseCompanyPlatforms } from "@/server/modules/company/companyPlatforms";
 import { shopeeTimestamp, signShopeeRequest } from "./shopeeSign";
 
 export class ShopeeApiError extends Error {}
+
+export interface ShopeeCredentials {
+    companyId: bigint;
+    shopId: string;
+    accessToken: string;
+    refreshToken: string;
+    expiresAt: Date | null;
+}
 
 interface ShopeeErrorBody {
     error?: string;
@@ -37,6 +47,20 @@ export function buildShopeeAuthUrl(): string {
     return url.toString();
 }
 
+export async function getShopeeAuthorizationUrlForCompany(companyId: bigint): Promise<string | null> {
+    const company = await getCompanyById(companyId);
+    if (!company || !parseCompanyPlatforms(company.platforms).includes("shopee")) return null;
+    return buildShopeeAuthUrl();
+}
+
+export async function connectShopeeAccount(companyId: bigint, code: string, shopId: string): Promise<void> {
+    await saveShopeeCredentials(companyId, await exchangeShopeeCode(code, shopId));
+}
+
+export function disconnectShopeeAccount(companyId: bigint): Promise<unknown> {
+    return clearShopeeCredentials(companyId);
+}
+
 /** Exchanges the OAuth `code` Shopee redirected back with for an access/refresh token pair. */
 export async function exchangeShopeeCode(code: string, shopId: string): Promise<ShopeeTokenResult> {
     const path = "/api/v2/auth/token/get";
@@ -67,6 +91,20 @@ export async function exchangeShopeeCode(code: string, shopId: string): Promise<
         refreshToken: body.refresh_token,
         expiresAt: new Date(Date.now() + Number(body.expire_in ?? 0) * 1000),
     };
+}
+
+/**
+ * Refreshes the access token if it's expired/near-expiry and persists the new pair
+ * to the DB. Shared by the live-dashboard pull and the ETL sync so token-refresh
+ * logic isn't duplicated between them.
+ */
+export async function ensureValidAccessToken(credentials: ShopeeCredentials): Promise<string> {
+    const nearExpiry = !credentials.expiresAt || credentials.expiresAt.getTime() - Date.now() < 5 * 60 * 1000;
+    if (!nearExpiry) return credentials.accessToken;
+
+    const refreshed = await refreshShopeeAccessToken(credentials.shopId, credentials.refreshToken);
+    await saveShopeeCredentials(credentials.companyId, refreshed);
+    return refreshed.accessToken;
 }
 
 /** Refreshes an expired/near-expiry access token using the stored refresh token. */
