@@ -23,3 +23,21 @@ export interface CampaignsResponse {
     };
     campaigns: CampaignRow[];
 }
+
+export interface CampaignDetailPost {
+    postId: string;
+    message: string | null;
+    permalink: string | null;
+    publishedAt: string | null;
+    adName: string;
+    spend: number;
+    reach: number;
+    clicks: number;
+}
+
+export interface CampaignDetailResponse {
+    campaignName: string;
+    statusLabel: string;
+    statusTone: CampaignStatusTone;
+    posts: CampaignDetailPost[];
+}

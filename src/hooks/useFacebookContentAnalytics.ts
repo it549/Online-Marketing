@@ -7,13 +7,11 @@ export function useFacebookContentAnalytics() {
     const [data, setData] = useState<FacebookContentDashboardResponse | null>(null);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
-    const [importJobId, setImportJobId] = useState<string | null>(null);
 
     const fetchData = useCallback(async () => {
         try {
             setLoading(true);
-            const query = importJobId ? `?importJobId=${importJobId}` : "";
-            const response = await fetch(`/api/dashboard/facebook/content-analytics${query}`);
+            const response = await fetch("/api/dashboard/facebook/content-analytics");
             const result = await response.json();
 
             if (!response.ok) {
@@ -28,11 +26,11 @@ export function useFacebookContentAnalytics() {
         } finally {
             setLoading(false);
         }
-    }, [importJobId]);
+    }, []);
 
     useEffect(() => {
         void Promise.resolve().then(fetchData);
     }, [fetchData]);
 
-    return { data, loading, error, importJobId, setImportJobId, refetch: fetchData };
+    return { data, loading, error, refetch: fetchData };
 }

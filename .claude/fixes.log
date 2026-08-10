@@ -1,0 +1,1 @@
+2026-08-08 | src/server/modules/facebook/content/facebookContentSync.service.ts | Content Sync wrongly required pages_read_user_content scope | removed it from REQUIRED_PAGE_SCOPES and error messages

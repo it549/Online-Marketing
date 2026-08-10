@@ -416,6 +416,7 @@ model ContentPost {
   title           String?            @db.Text
   postType        String?            @map("post_type")
   permalink       String?            @db.Text
+  imageUrl        String?            @map("image_url") @db.Text
   publishedAt     DateTime?          @map("published_at")
   durationSeconds Int?               @map("duration_seconds")
   lastImportJobId BigInt?            @map("last_import_job_id")

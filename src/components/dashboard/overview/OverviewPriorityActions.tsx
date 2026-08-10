@@ -1,4 +1,13 @@
 import type { OverviewSignals } from "./overviewSignals";
+import type { OverviewPlatformId } from "@/types/overview";
+
+/** Maps an OverviewPlatformId (matches CompanyPlatformId) to HomeShell's `View` id -- the only mismatch is Google Ads' casing. */
+const PLATFORM_VIEW: Record<OverviewPlatformId, string> = {
+    facebook: "facebook",
+    shopee: "shopee",
+    tiktok: "tiktok",
+    googleAds: "googleads",
+};
 
 interface ActionCard {
     key: string;
@@ -24,8 +33,8 @@ function buildCards(signals: OverviewSignals): (ActionCard & { style: keyof type
             dot: "🔴",
             title: "ยังไม่มีลูกค้าเข้ามาเลยในช่วงนี้",
             reasons: ["ใช้งบโฆษณาไปแล้วแต่ยังไม่มีลูกค้าติดต่อเข้ามา ควรตรวจสอบว่าโฆษณายังทำงานปกติหรือไม่"],
-            ctaLabel: "ดูข้อมูล Lead",
-            onClick: () => window.location.assign("/?view=insights&tab=leads"),
+            ctaLabel: "ดูแคมเปญ",
+            onClick: () => window.location.assign("/?view=campaigns"),
         });
     }
 
@@ -62,8 +71,8 @@ function buildCards(signals: OverviewSignals): (ActionCard & { style: keyof type
             dot: "🟡",
             title: `พิจารณาย้ายงบจาก ${signals.worstPlatform.name} ไป ${signals.bestPlatform.name}`,
             reasons: [`${signals.bestPlatform.name} ทำ ROAS ${signals.bestPlatform.roas?.toFixed(1)}x ดีกว่า ${signals.worstPlatform.name} ที่ทำได้ ${signals.worstPlatform.roas?.toFixed(1)}x`],
-            ctaLabel: "เปรียบเทียบแพลตฟอร์ม",
-            onClick: () => window.location.assign("/?view=insights"),
+            ctaLabel: `ดู ${signals.worstPlatform.name}`,
+            onClick: () => window.location.assign(`/?view=${PLATFORM_VIEW[signals.worstPlatform!.id]}`),
         });
     }
 
@@ -77,7 +86,6 @@ export default function OverviewPriorityActions({ signals }: { signals: Overview
     return (
         <section>
             <h2 className="mb-1 text-lg font-bold text-slate-900">สิ่งที่ควรทำวันนี้</h2>
-            <p className="mb-4 text-sm text-slate-500">สรุปจากข้อมูลจริงในระบบ พร้อมเหตุผลสั้น ๆ และลิงก์ไปดูรายละเอียดได้เลย</p>
 
             <div className="grid gap-4 sm:grid-cols-3">
                 {cards.map((c) => {

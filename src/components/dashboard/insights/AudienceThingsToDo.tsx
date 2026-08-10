@@ -86,7 +86,6 @@ export default function AudienceThingsToDo({ rows, onViewDetail }: Props) {
     return (
         <section>
             <h2 className="mb-1 text-lg font-bold text-slate-900">สิ่งที่ควรทำวันนี้</h2>
-            <p className="mb-4 text-sm text-slate-500">สรุปจากข้อมูลกลุ่มเป้าหมายในช่วงที่เลือก บอกเหตุผลสั้น ๆ และลิงก์ไปทำต่อได้เลย</p>
 
             <div className="grid gap-4 sm:grid-cols-3">
                 {cards.map((c) => {

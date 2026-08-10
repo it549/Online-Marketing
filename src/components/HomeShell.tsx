@@ -10,7 +10,7 @@ import {
     ChevronDown,
     ListChecks,
     Plug,
-    Users,
+    CalendarDays,
     Menu,
     X,
     PanelLeftClose,
@@ -25,18 +25,22 @@ import TikTokDashboard from "@/components/dashboard/TikTokDashboard";
 import GoogleAdsDashboard from "@/components/dashboard/GoogleAdsDashboard";
 import CampaignsPage from "@/components/dashboard/campaigns/CampaignsPage";
 import IntegrationsPage from "@/components/dashboard/integrations/IntegrationsPage";
-import InsightsPage from "@/components/dashboard/insights/InsightsPage";
+import ContentCalendarView from "@/components/dashboard/content/ContentCalendarView";
 import ContentGenerator from "@/components/contentgenerate/ContentGenerator";
 import AdPlanner from "@/components/adplanner/AdPlanner";
 import LogoutButton from "@/components/auth/LogoutButton";
 import { useSelectedCompany } from "@/hooks/useSelectedCompany";
 import { CompanyPlatformId } from "@/types/company";
 
-type View = "overview" | "facebook" | "shopee" | "tiktok" | "googleads" | "campaigns" | "integrations" | "insights" | "content" | "adplan";
+type View = "overview" | "facebook" | "shopee" | "tiktok" | "googleads" | "campaigns" | "integrations" | "calendar" | "content" | "adplan";
 
-const VALID_VIEWS: View[] = ["overview", "facebook", "shopee", "tiktok", "googleads", "campaigns", "integrations", "insights", "content", "adplan"];
+const VALID_VIEWS: View[] = ["overview", "facebook", "shopee", "tiktok", "googleads", "campaigns", "integrations", "calendar", "content", "adplan"];
 
-/** Lets a redirect back from an OAuth callback (e.g. `?view=integrations`) land on the right tab. */
+/**
+ * Lets a redirect back from an OAuth callback (e.g. `?view=integrations`) land on the right tab.
+ * The standalone "insights" view was folded into each platform's own Audience tab -- old
+ * `?view=insights` links (bookmarks, shares) fall back to Overview instead of breaking.
+ */
 function getInitialView(): View {
     if (typeof window === "undefined") return "overview";
     const requested = new URLSearchParams(window.location.search).get("view");
@@ -54,7 +58,7 @@ const OVERVIEW_VIEW: { id: View; label: string; icon: string } = { id: "overview
 
 const STANDALONE_VIEWS: { id: View; label: string; icon: typeof ListChecks }[] = [
     { id: "campaigns", label: "แคมเปญ", icon: ListChecks },
-    { id: "insights", label: "อินไซต์ผู้ชม", icon: Users },
+    { id: "calendar", label: "ปฏิทิน Content", icon: CalendarDays },
     { id: "integrations", label: "การเชื่อมต่อ", icon: Plug },
 ];
 
@@ -246,7 +250,7 @@ export default function HomeShell({ userEmail }: Props) {
                         {activeView === "tiktok" && <TikTokDashboard />}
                         {activeView === "googleads" && <GoogleAdsDashboard />}
                         {activeView === "campaigns" && <CampaignsPage />}
-                        {activeView === "insights" && <InsightsPage />}
+                        {activeView === "calendar" && <ContentCalendarView />}
                         {activeView === "integrations" && <IntegrationsPage />}
                         {activeView === "content" && <ContentGenerator />}
                         {activeView === "adplan" && <AdPlanner />}

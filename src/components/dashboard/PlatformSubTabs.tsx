@@ -1,4 +1,4 @@
-import { Activity, FileText, Sparkles } from "lucide-react";
+import { Activity, FileText, Sparkles, Users } from "lucide-react";
 
 export type PlatformSubTab = "api" | "imported" | "ai";
 
@@ -13,6 +13,25 @@ const DEFAULT_TABS: SubTabDef<PlatformSubTab>[] = [
     { id: "imported", label: "Imported Analytics", icon: FileText },
     { id: "ai", label: "AI Insights", icon: Sparkles },
 ];
+
+/** Consistent per-platform navigation shape (Rule 3): every platform dashboard uses this same tab set and order. */
+export type PlatformTab = "overview" | "content" | "audience" | "ai";
+
+export const PLATFORM_TABS: SubTabDef<PlatformTab>[] = [
+    { id: "overview", label: "Overview", icon: Activity },
+    { id: "content", label: "Content", icon: FileText },
+    { id: "audience", label: "Audience", icon: Users },
+    { id: "ai", label: "AI Insight", icon: Sparkles },
+];
+
+const VALID_PLATFORM_TABS: PlatformTab[] = ["overview", "content", "audience", "ai"];
+
+/** Lets a CTA elsewhere in the app (e.g. `/?view=facebook&tab=audience`) land on a specific platform tab, mirroring HomeShell's `getInitialView()`. */
+export function getInitialPlatformTab(): PlatformTab {
+    if (typeof window === "undefined") return "overview";
+    const requested = new URLSearchParams(window.location.search).get("tab");
+    return VALID_PLATFORM_TABS.includes(requested as PlatformTab) ? (requested as PlatformTab) : "overview";
+}
 
 interface Props<T extends string> {
     value: T;

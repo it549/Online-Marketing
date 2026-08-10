@@ -22,9 +22,10 @@ const TONE_DOT: Record<CampaignRow["statusTone"], string> = {
 
 interface Props {
     campaign: CampaignRow;
+    onClick?: () => void;
 }
 
-export default function CampaignCard({ campaign }: Props) {
+export default function CampaignCard({ campaign, onClick }: Props) {
     const platform = PLATFORM_META[campaign.platform];
 
     const stats: { label: string; value: string }[] = [
@@ -42,7 +43,13 @@ export default function CampaignCard({ campaign }: Props) {
     stats.push({ label: campaign.secondaryLabel, value: campaign.secondaryValue });
 
     return (
-        <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm transition-colors hover:border-slate-300">
+        <div
+            onClick={onClick}
+            role={onClick ? "button" : undefined}
+            tabIndex={onClick ? 0 : undefined}
+            onKeyDown={onClick ? (e) => (e.key === "Enter" || e.key === " ") && onClick() : undefined}
+            className={`rounded-2xl border border-slate-200 bg-white p-5 shadow-sm transition-colors hover:border-slate-300 ${onClick ? "cursor-pointer hover:shadow-md" : ""}`}
+        >
             <div className="flex items-start justify-between gap-3">
                 <div className="flex items-center gap-3">
                     <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-slate-50">

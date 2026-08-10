@@ -21,6 +21,7 @@ export interface NormalizedContentPost {
     title: string | null;
     postType: string | null;
     permalink: string | null;
+    imageUrl: string | null;
     publishedAt: Date | null;
     durationSeconds: number | null;
     metrics: NormalizedContentPostMetrics;

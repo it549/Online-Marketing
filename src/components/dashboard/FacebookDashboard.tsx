@@ -1,11 +1,20 @@
-import { Megaphone, Newspaper, Sparkles } from "lucide-react";
+"use client";
+
+import { useState } from "react";
 import PlatformPageHeader from "./PlatformPageHeader";
-import PlatformSection from "./PlatformSection";
+import PlatformSubTabs, { PLATFORM_TABS, PlatformTab, getInitialPlatformTab } from "./PlatformSubTabs";
+import PlatformInsightsPanel from "./insights/PlatformInsightsPanel";
 import FacebookAdsOverview from "./facebook/FacebookAdsOverview";
 import FacebookImportedAnalytics from "./facebook/FacebookImportedAnalytics";
+import FacebookAudienceInsights from "./facebook/FacebookAudienceInsights";
 import FacebookAiInsights from "./facebook/FacebookAiInsights";
+import { useSelectedCompany } from "@/hooks/useSelectedCompany";
 
 export default function FacebookDashboard() {
+    const [tab, setTab] = useState<PlatformTab>(getInitialPlatformTab);
+    const { company } = useSelectedCompany();
+    const platformEnabled = company ? company.platforms.includes("facebook") : false;
+
     return (
         <div className="space-y-6">
             <PlatformPageHeader
@@ -14,32 +23,18 @@ export default function FacebookDashboard() {
                 description="ผลลัพธ์โฆษณาและผลลัพธ์คอนเทนต์บนเพจ ในหน้าเดียว"
             />
 
-            <PlatformSection
-                accent="blue"
-                icon={Megaphone}
-                title="ผลลัพธ์โฆษณา"
-                subtitle="เงินที่ลงทุนไปกับผลที่ได้กลับมา — Spend, Funnel, Trend, กลุ่มเป้าหมาย และแคมเปญ"
-            >
-                <FacebookAdsOverview />
-            </PlatformSection>
+            <PlatformSubTabs value={tab} onChange={setTab} tabs={PLATFORM_TABS} />
 
-            <PlatformSection
-                accent="emerald"
-                icon={Newspaper}
-                title="ผลลัพธ์ออร์แกนิก (เพจ)"
-                subtitle="คนเห็น คนกดใจ และเข้าถึงเพจจากคอนเทนต์ที่โพสต์ — Reach, Reactions, Engagement"
-            >
-                <FacebookImportedAnalytics />
-            </PlatformSection>
-
-            <PlatformSection
-                accent="indigo"
-                icon={Sparkles}
-                title="สรุปด้วย AI"
-                subtitle="วิเคราะห์ภาพรวมโฆษณา + ออร์แกนิกร่วมกัน หาสิ่งที่ควรทำต่อ"
-            >
-                <FacebookAiInsights />
-            </PlatformSection>
+            {tab === "overview" && <FacebookAdsOverview />}
+            {tab === "content" && <FacebookImportedAnalytics />}
+            {tab === "audience" && (
+                <PlatformInsightsPanel
+                    platform="facebook"
+                    platformEnabled={platformEnabled}
+                    renderAudience={(range) => <FacebookAudienceInsights dateFrom={range.dateFrom} dateTo={range.dateTo} />}
+                />
+            )}
+            {tab === "ai" && <FacebookAiInsights />}
         </div>
     );
 }

@@ -12,6 +12,10 @@ export type CronGuardResult = { response?: undefined } | { response: NextRespons
 export function requireCronSecret(request: NextRequest): CronGuardResult {
     const authHeader = request.headers.get("authorization");
 
+    console.log("DEBUG authHeader:", JSON.stringify(authHeader));
+    console.log("DEBUG expected:", JSON.stringify(`Bearer ${config.cron.secret}`));
+    console.log("DEBUG config.cron.secret:", JSON.stringify(config.cron.secret));
+
     if (authHeader !== `Bearer ${config.cron.secret}`) {
         return { response: NextResponse.json({ error: "Unauthorized" }, { status: 401 }) };
     }

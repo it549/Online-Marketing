@@ -24,6 +24,8 @@ const configurationEnvShema = z.object({
     FACEBOOK_APP_ID: z.string().min(1),
     FACEBOOK_APP_SECRET: z.string().min(1),
     FACEBOOK_REDIRECT_URL: z.url(),
+    FACEBOOK_PAGE_ID: z.string(),
+    FACEBOOK_PAGE_ACCESS_TOKEN: z.string(),
 
     CRON_SECRET: z.string().min(1),
 
@@ -43,6 +45,8 @@ export const config = {
         appId: env.FACEBOOK_APP_ID,
         appSecret: env.FACEBOOK_APP_SECRET,
         redirectUrl: env.FACEBOOK_REDIRECT_URL,
+        pageId: env.FACEBOOK_PAGE_ID,
+        pageAccessToken: env.FACEBOOK_PAGE_ACCESS_TOKEN,
     },
 
     groq: env.GROQ_API_KEY,

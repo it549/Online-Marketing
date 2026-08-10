@@ -1,28 +1,20 @@
 import {
     FacebookContentDashboardResponse,
-    FacebookContentImportBatch,
     FacebookContentPostSummary,
     FacebookContentTypeBreakdown,
 } from "@/types/facebookContentDashboard";
-import { getAdvertisedExternalPostIds, getFacebookContentRepository, listFacebookContentImportJobs } from "./facebookContent.repository";
+import { CampaignDetailResponse } from "@/types/campaigns";
+import {
+    getAdPostsForCompany,
+    getCampaignDetailByExternalCampaignId,
+} from "./facebookContent.repository";
 
-const UNSPECIFIED_POST_TYPE = "ไม่ระบุ";
+const ADVERTISED_POST_TYPE = "โฆษณา";
 
-export async function getFacebookContentAnalytics(companyId: bigint, importJobId?: string): Promise<FacebookContentDashboardResponse> {
-    const [posts, importJobs] = await Promise.all([
-        getFacebookContentRepository(companyId, importJobId),
-        listFacebookContentImportJobs(companyId),
-    ]);
+export async function getFacebookContentAnalytics(companyId: bigint): Promise<FacebookContentDashboardResponse> {
+    const adPosts = await getAdPostsForCompany(companyId);
 
-    const importBatches: FacebookContentImportBatch[] = importJobs.map((job) => ({
-        id: job.id.toString(),
-        filename: job.filename,
-        importedAt: job.importedAt ? job.importedAt.toISOString() : null,
-        totalRecords: job.totalRecords,
-        periodLabel: formatPeriod(job.rangeStartDate, job.rangeEndDate),
-    }));
-
-    if (!posts || posts.length === 0) {
+    if (adPosts.length === 0) {
         return {
             hasData: false,
             totalPosts: 0,
@@ -33,39 +25,33 @@ export async function getFacebookContentAnalytics(companyId: bigint, importJobId
             totalAdvertisedPosts: 0,
             posts: [],
             breakdown: [],
-            importBatches,
-            selectedImportBatchId: importJobId ?? null,
+            importBatches: [],
+            selectedImportBatchId: null,
         };
     }
 
-    const advertisedExternalPostIds = await getAdvertisedExternalPostIds(
-        companyId,
-        posts.map((post) => post.externalPostId),
-    );
-
-    const postSummaries: FacebookContentPostSummary[] = posts.map((post) => {
-        const reach = post.metric?.reach ?? 0;
-        const views = post.metric?.views ?? 0;
-        const reactions = post.metric?.reactions ?? 0;
-        const comments = post.metric?.comments ?? 0;
-        const shares = post.metric?.shares ?? 0;
+    const postSummaries: FacebookContentPostSummary[] = adPosts.map(({ adPost, ads }) => {
+        const reactions = adPost.likeCount ?? 0;
+        const comments = adPost.commentCount ?? 0;
+        const shares = adPost.shareCount ?? 0;
 
         return {
-            id: post.id.toString(),
-            title: post.title ?? post.externalPostId,
-            postType: post.postType ?? UNSPECIFIED_POST_TYPE,
-            publishedAt: post.publishedAt ? post.publishedAt.toISOString() : null,
-            reach,
-            views,
+            id: adPost.id.toString(),
+            title: adPost.message ?? adPost.externalPostId,
+            postType: ADVERTISED_POST_TYPE,
+            publishedAt: adPost.publishedAt ? adPost.publishedAt.toISOString() : null,
+            reach: 0,
+            views: 0,
             reactions,
             comments,
             shares,
             engagement: reactions + comments + shares,
-            isAdvertised: advertisedExternalPostIds.has(post.externalPostId),
+            isAdvertised: ads.length > 0,
+            advertisingAds: ads,
         };
     });
 
-    postSummaries.sort((a, b) => b.reach - a.reach);
+    postSummaries.sort((a, b) => b.engagement - a.engagement);
 
     const breakdownByType = new Map<string, FacebookContentTypeBreakdown>();
 
@@ -96,16 +82,21 @@ export async function getFacebookContentAnalytics(companyId: bigint, importJobId
         totalAdvertisedPosts: postSummaries.filter((post) => post.isAdvertised).length,
         posts: postSummaries,
         breakdown: Array.from(breakdownByType.values()).sort((a, b) => b.totalReach - a.totalReach),
-        importBatches,
-        selectedImportBatchId: importJobId ?? null,
+        importBatches: [],
+        selectedImportBatchId: null,
     };
 }
 
-function formatPeriod(start: Date | null, end: Date | null): string | null {
-    if (!start || !end) return null;
+export async function getFacebookCampaignDetail(companyId: bigint, externalCampaignId: string): Promise<CampaignDetailResponse | null> {
+    const result = await getCampaignDetailByExternalCampaignId(companyId, externalCampaignId);
+    if (!result) return null;
 
-    const startLabel = start.toLocaleDateString("th-TH", { year: "numeric", month: "short", day: "numeric" });
-    const endLabel = end.toLocaleDateString("th-TH", { year: "numeric", month: "short", day: "numeric" });
+    const isActive = result.campaign.campaignStatus === "ACTIVE";
 
-    return `${startLabel} - ${endLabel}`;
+    return {
+        campaignName: result.campaign.campaignName,
+        statusLabel: isActive ? "กำลังทำงาน" : "หยุดชั่วคราว",
+        statusTone: isActive ? "positive" : "neutral",
+        posts: result.posts,
+    };
 }

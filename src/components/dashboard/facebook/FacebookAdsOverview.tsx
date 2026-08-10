@@ -9,7 +9,6 @@ import MetricCards from "../MetricCards";
 import DashboardTable from "../DashboardTable";
 import FacebookMarketingFunnel from "./FacebookMarketingFunnel";
 import FacebookPerformanceTrend from "./FacebookPerformanceTrend";
-import FacebookAudienceInsights from "./FacebookAudienceInsights";
 import { useFacebookApiPerformance } from "@/hooks/useFacebookApiPerformance";
 
 function getDefaultDateRange() {
@@ -73,8 +72,6 @@ export default function FacebookAdsOverview() {
                                     <FacebookPerformanceTrend dateFrom={range.dateFrom} dateTo={range.dateTo} />
                                 </div>
                             </div>
-
-                            <FacebookAudienceInsights dateFrom={range.dateFrom} dateTo={range.dateTo} />
 
                             <DashboardTable title="ผลลัพธ์แคมเปญ" table={data.table} />
                         </>

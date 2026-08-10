@@ -1,3 +1,14 @@
+export interface FacebookPostAd {
+    adId: string;
+    adName: string;
+    campaignId: string;
+    campaignName: string;
+    status: string;
+    spend: number;
+    reach: number;
+    clicks: number;
+}
+
 export interface FacebookContentPostSummary {
     id: string;
     title: string;
@@ -10,6 +21,7 @@ export interface FacebookContentPostSummary {
     shares: number;
     engagement: number;
     isAdvertised: boolean;
+    advertisingAds: FacebookPostAd[];
 }
 
 export interface FacebookContentTypeBreakdown {

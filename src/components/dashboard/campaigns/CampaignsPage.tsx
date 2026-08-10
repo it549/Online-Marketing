@@ -5,6 +5,7 @@ import { RefreshCw } from "lucide-react";
 import DashboardLoading from "../DashboardLoading";
 import DashboardError from "../DashboardError";
 import CampaignCard from "./CampaignCard";
+import CampaignDetailModal from "./CampaignDetailModal";
 
 import { useCampaigns } from "@/hooks/useCampaigns";
 import { useSelectedCompany } from "@/hooks/useSelectedCompany";
@@ -23,6 +24,7 @@ export default function CampaignsPage() {
     const { data, loading, error, refetch } = useCampaigns();
     const { company } = useSelectedCompany();
     const [filter, setFilter] = useState<FilterId>("all");
+    const [selectedCampaignId, setSelectedCampaignId] = useState<string | null>(null);
 
     const platformFilters = company?.platforms ?? ["facebook", "shopee", "tiktok"];
     const filters: { id: FilterId; label: string }[] = [
@@ -83,12 +85,18 @@ export default function CampaignsPage() {
                     ) : (
                         <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
                             {filteredCampaigns.map((campaign) => (
-                                <CampaignCard key={campaign.id} campaign={campaign} />
+                                <CampaignCard
+                                    key={campaign.id}
+                                    campaign={campaign}
+                                    onClick={campaign.platform === "facebook" ? () => setSelectedCampaignId(campaign.id) : undefined}
+                                />
                             ))}
                         </div>
                     )}
                 </>
             )}
+
+            <CampaignDetailModal campaignId={selectedCampaignId} onClose={() => setSelectedCampaignId(null)} />
         </div>
     );
 }

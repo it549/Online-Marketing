@@ -12,12 +12,19 @@ interface GraphListResponse<T> {
 }
 
 interface GraphErrorResponse {
-    error?: { message?: string };
+    error?: { message?: string; code?: number };
 }
 
 function graphErrorMessage(errorText: string): string {
     try {
-        return (JSON.parse(errorText) as GraphErrorResponse).error?.message ?? errorText;
+        const parsed = JSON.parse(errorText) as GraphErrorResponse;
+        const message = parsed.error?.message ?? errorText;
+
+        if (parsed.error?.code === 10 && /pages_read_engagement|pages_read_user_content|Page Public Content Access/i.test(message)) {
+            return `${message} (ต้องใช้ Facebook Page token ที่มี permission pages_read_engagement และ pages_read_user_content ทั้งคู่ และถูกสร้างขึ้นสำหรับเพจที่ระบุ ไม่ใช่ token ของ ad-account ทั่วไป)`;
+        }
+
+        return message;
     } catch {
         return errorText;
     }

@@ -8,9 +8,8 @@ export async function GET(request: NextRequest) {
     if (guard.response) return guard.response;
 
     try {
-        const importJobId = request.nextUrl.searchParams.get("importJobId") ?? undefined;
         const companyId = await getSelectedCompanyId(request);
-        const data = await getFacebookContentAnalytics(companyId, importJobId);
+        const data = await getFacebookContentAnalytics(companyId);
         return NextResponse.json(data);
     } catch (error) {
         return NextResponse.json(
