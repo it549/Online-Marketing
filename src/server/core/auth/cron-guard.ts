@@ -1,3 +1,4 @@
+import { timingSafeEqual } from "crypto";
 import { NextRequest, NextResponse } from "next/server";
 import { config } from "@/server/configurations/config";
 
@@ -12,11 +13,10 @@ export type CronGuardResult = { response?: undefined } | { response: NextRespons
 export function requireCronSecret(request: NextRequest): CronGuardResult {
     const authHeader = request.headers.get("authorization");
 
-    console.log("DEBUG authHeader:", JSON.stringify(authHeader));
-    console.log("DEBUG expected:", JSON.stringify(`Bearer ${config.cron.secret}`));
-    console.log("DEBUG config.cron.secret:", JSON.stringify(config.cron.secret));
+    const expected = Buffer.from(`Bearer ${config.cron.secret}`);
+    const received = Buffer.from(authHeader ?? "");
 
-    if (authHeader !== `Bearer ${config.cron.secret}`) {
+    if (received.length !== expected.length || !timingSafeEqual(received, expected)) {
         return { response: NextResponse.json({ error: "Unauthorized" }, { status: 401 }) };
     }
 

@@ -1,1 +1,4 @@
 2026-08-08 | src/server/modules/facebook/content/facebookContentSync.service.ts | Content Sync wrongly required pages_read_user_content scope | removed it from REQUIRED_PAGE_SCOPES and error messages
+2026-09-29 | src/server/shared/llm/groq.client.ts, src/server/modules/ai-planner/aiPlanner.repository.ts | all AI 500: llama-3.1-8b-instant decommissioned | Gemini 3.8/3.5 flash, Groq gpt-oss-120b fallback
+2026-09-29 | src/server/core/auth/auth.repository.ts | Postgres login email case-sensitive | findFirst with mode insensitive
+2026-10-03 | src/server/core/auth/cron-guard.ts, src/app/api/debug/facebook-token | CRON_SECRET logged; debug endpoint exposed | removed logs, timingSafeEqual, deleted endpoint
