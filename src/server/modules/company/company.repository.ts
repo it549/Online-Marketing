@@ -1,11 +1,27 @@
+import type { Company } from "@prisma/client";
 import { prisma } from "@/server/database/prisma";
+import { decryptToken, encryptToken } from "@/server/shared/crypto/tokenCrypto";
+
+// Platform tokens are encrypted at rest -- every Company read/write goes through this file,
+// so decrypt on the way out and encrypt on the way in here.
+function decryptCompany<T extends Company | null>(company: T): T {
+    if (!company) return company;
+    return {
+        ...company,
+        facebookAccessToken: decryptToken(company.facebookAccessToken),
+        googleAdsRefreshToken: decryptToken(company.googleAdsRefreshToken),
+        tiktokAccessToken: decryptToken(company.tiktokAccessToken),
+        shopeeAccessToken: decryptToken(company.shopeeAccessToken),
+        shopeeRefreshToken: decryptToken(company.shopeeRefreshToken),
+    };
+}
 
 export async function listCompanies() {
-    return prisma.company.findMany({ orderBy: { id: "asc" } });
+    return (await prisma.company.findMany({ orderBy: { id: "asc" } })).map(decryptCompany);
 }
 
 export async function getCompanyById(id: bigint) {
-    return prisma.company.findUnique({ where: { id } });
+    return decryptCompany(await prisma.company.findUnique({ where: { id } }));
 }
 
 export async function saveShopeeCredentials(
@@ -16,8 +32,8 @@ export async function saveShopeeCredentials(
         where: { id: companyId },
         data: {
             shopeeShopId: credentials.shopId,
-            shopeeAccessToken: credentials.accessToken,
-            shopeeRefreshToken: credentials.refreshToken,
+            shopeeAccessToken: encryptToken(credentials.accessToken),
+            shopeeRefreshToken: encryptToken(credentials.refreshToken),
             shopeeTokenExpiresAt: credentials.expiresAt,
         },
     });
@@ -43,7 +59,7 @@ export async function updateGoogleAdsConnection(
         where: { id: companyId },
         data: {
             googleAdsCustomerId: data.customerId,
-            googleAdsRefreshToken: data.refreshToken,
+            googleAdsRefreshToken: encryptToken(data.refreshToken),
         },
     });
 }
@@ -63,7 +79,7 @@ export async function updateFacebookConnection(
         where: { id: companyId },
         data: {
             facebookAdAccountId: data.adAccountId,
-            facebookAccessToken: data.accessToken,
+            facebookAccessToken: encryptToken(data.accessToken),
             facebookTokenExpiresAt: data.expiresAt,
         },
     });
