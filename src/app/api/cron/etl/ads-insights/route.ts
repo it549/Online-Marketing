@@ -3,7 +3,7 @@ import { requireCronSecret } from "@/server/core/auth/cron-guard";
 import { runDailyEtlSync } from "@/server/core/etl/etlOrchestrator.service";
 import { getYesterdayInBangkok } from "@/server/core/etl/etlDate.util";
 
-// Vercel Cron entry (see vercel.json): fires daily at 03:00 Asia/Bangkok, after
+// Cron entry: call daily at 03:00 Asia/Bangkok (20:00 UTC) from an external scheduler with the CRON_SECRET bearer token, after
 // "yesterday" has fully elapsed there. Supports manual backfill via ?date=YYYY-MM-DD
 // and dry-run validation via ?dryRun=true (fetches+normalizes without persisting).
 export async function GET(request: NextRequest) {

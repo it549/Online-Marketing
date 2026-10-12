@@ -2,7 +2,7 @@ const BANGKOK_UTC_OFFSET_HOURS = 7;
 
 /**
  * Returns "yesterday" as a UTC-midnight Date representing the Bangkok (UTC+7)
- * calendar day before `reference`. Vercel cron functions run in UTC, so this
+ * calendar day before `reference`. Cron-triggered functions may run in UTC, so this
  * must not rely on server-local time to decide which day "yesterday" means.
  */
 export function getYesterdayInBangkok(reference: Date = new Date()): Date {

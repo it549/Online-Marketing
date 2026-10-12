@@ -5,10 +5,9 @@ import { config } from "@/server/configurations/config";
 export type CronGuardResult = { response?: undefined } | { response: NextResponse };
 
 /**
- * Vercel attaches `Authorization: Bearer <CRON_SECRET>` automatically on
- * cron-triggered invocations once CRON_SECRET is set as an env var -- this
- * also lets the same routes be triggered manually (e.g. for backfill) by
- * passing the same header.
+ * Cron routes expect `Authorization: Bearer <CRON_SECRET>`. The scheduler that
+ * calls them (and anyone triggering them manually, e.g. for backfill) must
+ * send that header.
  */
 export function requireCronSecret(request: NextRequest): CronGuardResult {
     const authHeader = request.headers.get("authorization");
