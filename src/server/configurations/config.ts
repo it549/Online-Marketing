@@ -28,6 +28,7 @@ const configurationEnvShema = z.object({
     FACEBOOK_PAGE_ACCESS_TOKEN: z.string(),
 
     CRON_SECRET: z.string().min(1),
+    ALERT_WEBHOOK_URL: z.string().optional(),
 
     TIKTOK_APP_ID: z.string().optional(),
     TIKTOK_APP_SECRET: z.string().optional(),
@@ -68,6 +69,10 @@ export const config = {
 
     cron: {
         secret: env.CRON_SECRET,
+    },
+    alerts: {
+        // Empty string in .env counts as "not configured".
+        webhookUrl: env.ALERT_WEBHOOK_URL || undefined,
     },
     tiktok: {
         appId: env.TIKTOK_APP_ID,

@@ -1,5 +1,5 @@
 "use client";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Image from "next/image";
 import {
     LayoutDashboard,
@@ -25,6 +25,7 @@ import TikTokDashboard from "@/components/dashboard/TikTokDashboard";
 import GoogleAdsDashboard from "@/components/dashboard/GoogleAdsDashboard";
 import CampaignsPage from "@/components/dashboard/campaigns/CampaignsPage";
 import IntegrationsPage from "@/components/dashboard/integrations/IntegrationsPage";
+import TokenHealthBanner from "@/components/dashboard/integrations/TokenHealthBanner";
 import ContentCalendarView from "@/components/dashboard/content/ContentCalendarView";
 import ContentGenerator from "@/components/contentgenerate/ContentGenerator";
 import AdPlanner from "@/components/adplanner/AdPlanner";
@@ -72,11 +73,17 @@ interface Props {
 }
 
 export default function HomeShell({ userEmail }: Props) {
-    const [activeView, setActiveView] = useState<View>(getInitialView);
+    const [activeView, setActiveView] = useState<View>("overview");
     const [dashboardExpanded, setDashboardExpanded] = useState(true);
     const [collapsed, setCollapsed] = useState(false);
     const [mobileOpen, setMobileOpen] = useState(false);
     const { company } = useSelectedCompany();
+
+    // Read ?view= after mount so the first client render matches the server HTML.
+    useEffect(() => {
+        // eslint-disable-next-line react-hooks/set-state-in-effect
+        setActiveView(getInitialView());
+    }, []);
 
     const platformViews = (company?.platforms ?? ["facebook", "shopee", "tiktok"]).map((platform) => PLATFORM_NAV[platform]);
     const dashboardViews = [OVERVIEW_VIEW, ...platformViews];
@@ -244,6 +251,7 @@ export default function HomeShell({ userEmail }: Props) {
 
                 <main className="flex-1 overflow-y-auto px-6 py-8 lg:px-10">
                     <div className="mx-auto max-w-7xl">
+                        <TokenHealthBanner onOpenIntegrations={() => selectView("integrations")} />
                         {activeView === "overview" && <OverviewPage />}
                         {activeView === "facebook" && <FacebookDashboard />}
                         {activeView === "shopee" && <ShopeeDashboard />}
