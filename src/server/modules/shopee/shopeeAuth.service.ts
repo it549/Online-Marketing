@@ -18,12 +18,29 @@ interface ShopeeErrorBody {
     message?: string;
 }
 
+interface ShopeeTokenBody extends ShopeeErrorBody {
+    shop_id?: number | string;
+    access_token?: string;
+    refresh_token?: string;
+    expire_in?: number;
+}
+
 export interface ShopeeTokenResult {
     shopId: string;
     accessToken: string;
     refreshToken: string;
     /** Absolute expiry instant for the access token (Shopee's `expire_in` is seconds-from-now). */
     expiresAt: Date;
+}
+
+/** Shopee's gateway sometimes answers with a plain-text error (e.g. `ERROR_SP_...`) instead of JSON. */
+export async function parseShopeeJson<T = ShopeeTokenBody>(response: Response): Promise<T> {
+    const text = await response.text();
+    try {
+        return JSON.parse(text) as T;
+    } catch {
+        throw new ShopeeApiError(`Shopee ตอบกลับไม่ใช่ JSON (HTTP ${response.status}): ${text.slice(0, 200)}`);
+    }
 }
 
 function assertNoShopeeError(body: ShopeeErrorBody, fallback: string): void {
@@ -78,7 +95,7 @@ export async function exchangeShopeeCode(code: string, shopId: string): Promise<
         body: JSON.stringify({ code, shop_id: Number(shopId), partner_id: Number(config.shopee.partnerID) }),
     });
 
-    const body = await response.json();
+    const body = await parseShopeeJson(response);
     assertNoShopeeError(body, "ไม่สามารถแลก token จาก Shopee ได้");
 
     if (!body.access_token || !body.refresh_token) {
@@ -124,7 +141,7 @@ export async function refreshShopeeAccessToken(shopId: string, refreshToken: str
         body: JSON.stringify({ refresh_token: refreshToken, shop_id: Number(shopId), partner_id: Number(config.shopee.partnerID) }),
     });
 
-    const body = await response.json();
+    const body = await parseShopeeJson(response);
     assertNoShopeeError(body, "ไม่สามารถต่ออายุ token จาก Shopee ได้");
 
     if (!body.access_token || !body.refresh_token) {
