@@ -2,7 +2,7 @@ import type { Company } from "@prisma/client";
 import { saveEtlSyncResult } from "@/server/core/etl/etl-database.service";
 import { formatDateParam } from "@/server/core/etl/etlDate.util";
 import type { NormalizedEtlSyncResult, PlatformSyncResult } from "@/server/core/etl/etl.types";
-import type { GoogleAdsCredentials } from "@/types/googleAds";
+import { buildGoogleAdsCredentials } from "./client";
 import { getGoogleAdsAdGroupDaily, getGoogleAdsCampaignDaily } from "./googleAdsEtl.repository";
 import {
     normalizeGoogleAdGroup,
@@ -10,11 +10,6 @@ import {
     normalizeGoogleCampaign,
     normalizeGoogleCampaignInsight,
 } from "./googleAdsEtl.adapter";
-
-function resolveGoogleAdsCredentials(company: Company): GoogleAdsCredentials | null {
-    if (!company.googleAdsCustomerId || !company.googleAdsRefreshToken) return null;
-    return { customerId: company.googleAdsCustomerId, refreshToken: company.googleAdsRefreshToken };
-}
 
 // No token-refresh-and-persist step needed here (unlike Facebook/Shopee): the
 // google-ads-api SDK exchanges the stored refresh token internally on every
@@ -24,7 +19,7 @@ export async function syncGoogleAdsForCompany(
     targetDate: Date,
     options: { dryRun?: boolean } = {},
 ): Promise<PlatformSyncResult> {
-    const credentials = resolveGoogleAdsCredentials(company);
+    const credentials = buildGoogleAdsCredentials(company);
     if (!credentials) return { status: "skipped", reason: "not_connected" };
 
     const dateParam = formatDateParam(targetDate);

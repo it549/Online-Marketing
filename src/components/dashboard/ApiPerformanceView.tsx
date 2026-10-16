@@ -11,9 +11,10 @@ interface Props {
     loading: boolean;
     error: string | null;
     refetch?: () => void;
+    connectHref?: string;
 }
 
-export default function ApiPerformanceView({ data, loading, error, refetch }: Props) {
+export default function ApiPerformanceView({ data, loading, error, refetch, connectHref }: Props) {
     return (
         <div className="space-y-6">
             {loading && <DashboardLoading />}
@@ -36,7 +37,15 @@ export default function ApiPerformanceView({ data, loading, error, refetch }: Pr
                                 {data.error ?? "ระบบยังไม่สามารถเชื่อมต่อ API ของแพลตฟอร์มนี้ได้ จึงยังไม่มีข้อมูลแบบเรียลไทม์ให้แสดง"}
                             </p>
 
-                            {refetch && (
+                            {connectHref ? (
+                                <a
+                                    href={connectHref}
+                                    className="mx-auto mt-5 flex w-fit items-center gap-2 rounded-lg bg-amber-600 px-4 py-2 text-sm font-medium text-white shadow-sm transition-colors hover:bg-amber-500"
+                                >
+                                    <PlugZap className="h-4 w-4" strokeWidth={2} />
+                                    เชื่อมต่อ
+                                </a>
+                            ) : refetch && (
                                 <button
                                     onClick={refetch}
                                     disabled={loading}

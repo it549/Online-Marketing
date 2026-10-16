@@ -1,5 +1,4 @@
-import { config } from "@/server/configurations/config";
-import { googleAdsClient } from "./client";
+import { createGoogleAdsClient } from "./client";
 import type { GoogleAdsCredentials } from "@/types/googleAds";
 
 export interface GoogleAdsCampaignRow {
@@ -63,10 +62,10 @@ const AD_GROUP_DAILY_QUERY = (date: string) => `
 `;
 
 function customerFor(credentials: GoogleAdsCredentials) {
-    return googleAdsClient.Customer({
+    return createGoogleAdsClient(credentials.app).Customer({
         customer_id: credentials.customerId,
         refresh_token: credentials.refreshToken,
-        login_customer_id: config.google.customerID,
+        login_customer_id: credentials.app.loginCustomerId,
     });
 }
 

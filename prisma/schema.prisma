@@ -21,6 +21,10 @@ model Company {
   facebookTokenExpiresAt   DateTime?       @map("facebook_token_expires_at")
   googleAdsCustomerId   String?            @map("google_ads_customer_id")
   googleAdsRefreshToken String?            @map("google_ads_refresh_token") @db.Text
+  googleAdsClientId        String?         @map("google_ads_client_id")
+  googleAdsClientSecret    String?         @map("google_ads_client_secret") @db.Text
+  googleAdsDeveloperToken  String?         @map("google_ads_developer_token") @db.Text
+  googleAdsLoginCustomerId String?         @map("google_ads_login_customer_id")
   tiktokAdvertiserId    String?            @map("tiktok_advertiser_id")
   tiktokAccessToken     String?            @map("tiktok_access_token") @db.Text
   shopeeShopId          String?            @map("shopee_shop_id")

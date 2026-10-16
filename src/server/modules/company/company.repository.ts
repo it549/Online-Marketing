@@ -10,6 +10,8 @@ function decryptCompany<T extends Company | null>(company: T): T {
         ...company,
         facebookAccessToken: decryptToken(company.facebookAccessToken),
         googleAdsRefreshToken: decryptToken(company.googleAdsRefreshToken),
+        googleAdsClientSecret: decryptToken(company.googleAdsClientSecret),
+        googleAdsDeveloperToken: decryptToken(company.googleAdsDeveloperToken),
         tiktokAccessToken: decryptToken(company.tiktokAccessToken),
         shopeeAccessToken: decryptToken(company.shopeeAccessToken),
         shopeeRefreshToken: decryptToken(company.shopeeRefreshToken),
@@ -64,6 +66,26 @@ export async function updateGoogleAdsConnection(
     });
 }
 
+export interface GoogleAdsAppCredentialsInput {
+    clientId: string;
+    loginCustomerId: string;
+    // Blank = keep the stored value (secrets are never sent back to the browser).
+    clientSecret?: string;
+    developerToken?: string;
+}
+
+export async function updateGoogleAdsAppCredentials(companyId: bigint, input: GoogleAdsAppCredentialsInput): Promise<void> {
+    await prisma.company.update({
+        where: { id: companyId },
+        data: {
+            googleAdsClientId: input.clientId || null,
+            googleAdsLoginCustomerId: input.loginCustomerId || null,
+            ...(input.clientSecret ? { googleAdsClientSecret: encryptToken(input.clientSecret) } : {}),
+            ...(input.developerToken ? { googleAdsDeveloperToken: encryptToken(input.developerToken) } : {}),
+        },
+    });
+}
+
 export async function clearGoogleAdsConnection(companyId: bigint): Promise<void> {
     await prisma.company.update({
         where: { id: companyId },
@@ -93,5 +115,11 @@ export async function clearFacebookConnection(companyId: bigint): Promise<void> 
             facebookAccessToken: null,
             facebookTokenExpiresAt: null,
         },
+    });
+}
+export async function setGoogleAdsCustomerId(companyId: bigint, customerId: string): Promise<void> {
+    await prisma.company.update({
+        where: { id: companyId },
+        data: { googleAdsCustomerId: customerId },
     });
 }

@@ -1,6 +1,5 @@
 import { ApiPerformanceResponse } from "@/types/apiPerformance";
-import { config } from "@/server/configurations/config";
-import { googleAdsClient } from "./client";
+import { GOOGLE_ADS_APP_NOT_CONFIGURED_MESSAGE, buildGoogleAdsCredentials, createGoogleAdsClient, resolveGoogleAdsAppCredentials } from "./client";
 import { CAMPAIGN_PERFORMANCE_QUERY } from "./googleAds.repository";
 import { GoogleAdsCredentials } from "@/types/googleAds";
 import { emptyPerformanceResponse, mapCampaignRowsToPerformance } from "./googleAds.mapper";
@@ -8,10 +7,24 @@ import { getCompanyById } from "@/server/modules/company/company.repository";
 
 export async function getGoogleAdsApiPerformanceForCompany(companyId: bigint): Promise<ApiPerformanceResponse> {
     const company = await getCompanyById(companyId);
-    const credentials = company?.googleAdsCustomerId && company.googleAdsRefreshToken
-        ? { customerId: company.googleAdsCustomerId, refreshToken: company.googleAdsRefreshToken }
-        : null;
-    return getGoogleAdsApiPerformance(credentials);
+    if (company?.googleAdsRefreshToken && !resolveGoogleAdsAppCredentials(company)) {
+        return {
+            connected: false,
+            lastSyncedAt: null,
+            dateRangeLabel: null,
+            error: GOOGLE_ADS_APP_NOT_CONFIGURED_MESSAGE,
+            metrics: [],
+            table: { columns: [], rows: [] },
+        };
+    }
+    return getGoogleAdsApiPerformance(buildGoogleAdsCredentials(company));
+}
+
+// google-ads-api rejects with a GoogleAdsFailure ({ errors: [{ message }] }), not an Error instance.
+export function describeGoogleAdsError(err: unknown): string {
+    if (err instanceof Error) return err.message;
+    const message = (err as { errors?: Array<{ message?: string }> } | null)?.errors?.find((e) => e.message)?.message;
+    return message ?? "เกิดข้อผิดพลาดในการเชื่อมต่อ Google Ads API";
 }
 
 export async function getGoogleAdsApiPerformance(
@@ -29,10 +42,10 @@ export async function getGoogleAdsApiPerformance(
     }
 
     try {
-        const customer = googleAdsClient.Customer({
+        const customer = createGoogleAdsClient(credentials.app).Customer({
             customer_id: credentials.customerId,
             refresh_token: credentials.refreshToken,
-            login_customer_id: config.google.customerID,
+            login_customer_id: credentials.app.loginCustomerId,
         });
 
         const rows = await customer.query(CAMPAIGN_PERFORMANCE_QUERY);
@@ -46,7 +59,7 @@ export async function getGoogleAdsApiPerformance(
             connected: false,
             lastSyncedAt: null,
             dateRangeLabel: null,
-            error: err instanceof Error ? err.message : "เกิดข้อผิดพลาดในการเชื่อมต่อ Google Ads API",
+            error: describeGoogleAdsError(err),
             metrics: [],
             table: { columns: [], rows: [] },
         };

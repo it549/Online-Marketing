@@ -9,6 +9,8 @@ import { useFacebookApiPerformance } from "@/hooks/useFacebookApiPerformance";
 import { useShopeeApiPerformance } from "@/hooks/useShopeeApiPerformance";
 import { useTikTokApiPerformance } from "@/hooks/useTikTokApiPerformance";
 import { useGoogleAdsApiPerformance } from "@/hooks/useGoogleAdsApiPerformance";
+import GoogleAdsAccountPicker from "./GoogleAdsAccountPicker";
+import GoogleAdsCredentialsForm from "./GoogleAdsCredentialsForm";
 import { CompanyPlatformId } from "@/types/company";
 
 interface Company {
@@ -123,7 +125,7 @@ export default function IntegrationsPage() {
     const [switching, setSwitching] = useState(false);
     const [disconnecting, setDisconnecting] = useState(false);
 
-    const [callbackBanner, setCallbackBanner] = useState<CallbackBanner>(getInitialCallbackBanner);
+    const [callbackBanner, setCallbackBanner] = useState<CallbackBanner>(null);
 
     useEffect(() => {
         fetch("/api/company")
@@ -133,6 +135,13 @@ export default function IntegrationsPage() {
                 setSelectedId(data.selectedCompanyId ?? null);
             })
             .catch(() => { });
+    }, []);
+
+    // Read the banner after mount (not in useState) so the first client render matches the server HTML.
+    // Must stay above the strip effect below, which removes these params.
+    useEffect(() => {
+        // eslint-disable-next-line react-hooks/set-state-in-effect
+        setCallbackBanner(getInitialCallbackBanner());
     }, []);
 
     // Strip the one-time OAuth-callback query params so a page refresh doesn't re-show the banner.
@@ -366,7 +375,10 @@ export default function IntegrationsPage() {
                                 : googleAds.data?.error ?? "ยังไม่ได้เชื่อมต่อ Google Ads กับบัญชีนี้"
                         }
                         action={
-                            googleAds.data?.connected ? (
+                            <div className="flex flex-col items-start gap-2">
+                            <GoogleAdsCredentialsForm key={`cred-${selectedId ?? "none"}`} onSaved={googleAds.refetch} />
+                            <GoogleAdsAccountPicker key={selectedId ?? "none"} onChanged={googleAds.refetch} />
+                            {googleAds.data?.connected ? (
                                 <div className="flex items-center gap-2">
                                     <RetryButton label="ซิงค์ข้อมูลใหม่" loading={googleAds.loading} onClick={googleAds.refetch} />
                                     <button
@@ -386,7 +398,8 @@ export default function IntegrationsPage() {
                                     <PlugZap className="h-3.5 w-3.5" strokeWidth={2} />
                                     เชื่อมต่อ Google Ads
                                 </a>
-                            )
+                            )}
+                            </div>
                         }
                     />
                 )}

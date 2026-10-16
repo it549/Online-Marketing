@@ -29,7 +29,7 @@ export default function GoogleAdsDashboard() {
 
             <PlatformSubTabs value={tab} onChange={setTab} tabs={PLATFORM_TABS} />
 
-            {tab === "overview" && <ApiPerformanceView data={data} loading={loading} error={error} refetch={refetch} />}
+            {tab === "overview" && <ApiPerformanceView data={data} loading={loading} error={error} refetch={refetch} connectHref="/api/integrations/google-ads/connect" />}
             {tab === "content" && (
                 <DashboardEmptyState message="ยังไม่มี Content Analytics สำหรับ Google Ads" hint="ฟีเจอร์นี้กำลังจะมาเร็ว ๆ นี้" action={<span />} />
             )}

@@ -11,11 +11,11 @@ async function main() {
         const rungsiyo = await prisma.company.upsert({
             where: { code: "rungsiyo" },
             update: {
-                platforms: ["facebook", "shopee", "tiktok"],
+                platforms: ["facebook", "shopee", "tiktok", "googleAds"],
                 facebookAdAccountId: null,
                 facebookAccessToken: null,
             },
-            create: { name: "รังสิโย", code: "rungsiyo", platforms: ["facebook", "shopee", "tiktok"] },
+            create: { name: "รังสิโย", code: "rungsiyo", platforms: ["facebook", "shopee", "tiktok", "googleAds"] },
         });
 
         // Nilaphatra has no Shopee data -- it only runs Facebook, TikTok, and (once
