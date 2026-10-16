@@ -2,3 +2,8 @@
 2026-09-29 | src/server/shared/llm/groq.client.ts, src/server/modules/ai-planner/aiPlanner.repository.ts | all AI 500: llama-3.1-8b-instant decommissioned | Gemini 3.8/3.5 flash, Groq gpt-oss-120b fallback
 2026-09-29 | src/server/core/auth/auth.repository.ts | Postgres login email case-sensitive | findFirst with mode insensitive
 2026-10-03 | src/server/core/auth/cron-guard.ts, src/app/api/debug/facebook-token | CRON_SECRET logged; debug endpoint exposed | removed logs, timingSafeEqual, deleted endpoint
+2026-10-15 | src/app/api/integrations/{google-ads,facebook}/callback/route.ts | OAuth callback redirect to unreachable localhost | use absoluteUrl()
+2026-10-15 | src/server/modules/google-ads/googleAds.service.ts | real Google Ads error hidden by generic msg | extract GoogleAdsFailure errors[0].message
+2026-10-15 | src/components/HomeShell.tsx, dashboard/integrations/IntegrationsPage.tsx | hydration mismatch from window in useState | read query params in useEffect
+2026-10-15 | (Google Cloud project 73191734508) | Google Ads "test accounts only" error | Explorer access approved per Cloud project, not code
+2026-10-16 | src/server/modules/shopee/shopeeAuth.service.ts, shopeeApiPerformance.service.ts | Shopee plain-text error (ERROR_SP_...) crashed res.json() with cryptic JSON parse error | parseShopeeJson helper surfaces HTTP status + body + path

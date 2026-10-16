@@ -7,7 +7,7 @@ const nextConfig: NextConfig = {
     // dev resources (_next/*, HMR websocket) by default -- without this, pages hydrate with
     // broken JS over the tunnel and clicks (e.g. the login button) silently do nothing.
     // Update this host whenever the quick tunnel restarts and gets a new random subdomain.
-    allowedDevOrigins: ["province-nathan-come-wood.trycloudflare.com"],
+    allowedDevOrigins: ["appmarketing.nexzafe.com"],
 };
 
 export default nextConfig;
