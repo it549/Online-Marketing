@@ -1,5 +1,6 @@
 import { config } from "@/server/configurations/config";
-import { updateGoogleAdsConnection, clearGoogleAdsConnection } from "@/server/modules/company/company.repository";
+import { updateGoogleAdsConnection, clearGoogleAdsConnection, getCompanyById } from "@/server/modules/company/company.repository";
+import { resolveGoogleAdsApp } from "./googleAdsCredentials";
 
 const GOOGLE_ADS_SCOPE = "https://www.googleapis.com/auth/adwords";
 const GOOGLE_ADS_API_VERSION = "v24";
@@ -8,9 +9,10 @@ export type GoogleAdsConnectionResult =
     | { ok: true; customerId: string; customerCount: number }
     | { ok: false; message: string };
 
-export function createGoogleAdsAuthorizationUrl(state: string): string {
+export async function createGoogleAdsAuthorizationUrl(companyId: bigint, state: string): Promise<string> {
+    const app = resolveGoogleAdsApp(await getCompanyById(companyId));
     const authUrl = new URL("https://accounts.google.com/o/oauth2/v2/auth");
-    authUrl.searchParams.set("client_id", config.google.clientID);
+    authUrl.searchParams.set("client_id", app.clientId);
     authUrl.searchParams.set("redirect_uri", config.google.redirectUrl);
     authUrl.searchParams.set("response_type", "code");
     authUrl.searchParams.set("scope", GOOGLE_ADS_SCOPE);
@@ -24,13 +26,14 @@ export async function connectGoogleAdsAccount(
     companyId: bigint,
     authorizationCode: string,
 ): Promise<GoogleAdsConnectionResult> {
+    const app = resolveGoogleAdsApp(await getCompanyById(companyId));
     const tokenResponse = await fetch("https://oauth2.googleapis.com/token", {
         method: "POST",
         headers: { "Content-Type": "application/x-www-form-urlencoded" },
         body: new URLSearchParams({
             code: authorizationCode,
-            client_id: config.google.clientID,
-            client_secret: config.google.clientSecret,
+            client_id: app.clientId,
+            client_secret: app.clientSecret,
             redirect_uri: config.google.redirectUrl,
             grant_type: "authorization_code",
         }),
@@ -42,7 +45,7 @@ export async function connectGoogleAdsAccount(
 
     const customersResponse = await fetch(
         `https://googleads.googleapis.com/${GOOGLE_ADS_API_VERSION}/customers:listAccessibleCustomers`,
-        { headers: { Authorization: `Bearer ${tokenData.access_token}`, "developer-token": config.google.develoerToken } },
+        { headers: { Authorization: `Bearer ${tokenData.access_token}`, "developer-token": app.developerToken, ...(app.loginCustomerId && { "login-customer-id": app.loginCustomerId }) } },
     );
     const customersData = await customersResponse.json();
     if (!customersResponse.ok) {

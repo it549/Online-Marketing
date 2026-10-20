@@ -1,6 +1,6 @@
 import { config } from "@/server/configurations/config";
 import { ApiPerformanceResponse } from "@/types/apiPerformance";
-import { ShopeeApiError, ensureValidAccessToken, type ShopeeCredentials } from "./shopeeAuth.service";
+import { ShopeeApiError, ensureValidAccessToken, isShopeeInvalidTokenError, parseShopeeJson, type ShopeeCredentials } from "./shopeeAuth.service";
 import { shopeeTimestamp, signShopeeRequest } from "./shopeeSign";
 import { getCompanyById } from "@/server/modules/company/company.repository";
 
@@ -58,8 +58,11 @@ export async function shopeeShopGet(path: string, shopId: string, accessToken: s
     for (const [key, value] of Object.entries(params)) url.searchParams.set(key, value);
 
     const response = await fetch(url.toString());
-    const body = (await response.json()) as ShopeeApiEnvelope;
+    const body = (await parseShopeeJson(response, path)) as ShopeeApiEnvelope;
 
+    if (isShopeeInvalidTokenError(body)) {
+        throw new ShopeeApiError("Token Shopee ไม่ตรงกับแอปปัจจุบัน (เปลี่ยน partner_id/host หรือ token หมดอายุ) — กรุณาตัดการเชื่อมต่อแล้วเชื่อมต่อ Shopee ใหม่");
+    }
     if (body.error) {
         throw new ShopeeApiError(body.message ? `${body.message} (${body.error})` : `Shopee API error: ${body.error}`);
     }

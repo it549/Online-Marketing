@@ -1,12 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireAdmin } from "@/server/core/auth/api-guard";
 import { getSelectedCompanyId } from "@/server/core/company/selectedCompany";
+import { absoluteUrl } from "@/server/core/http/appUrl";
 import { connectFacebookAccount } from "@/server/modules/facebook/facebookIntegration.service";
 
 const STATE_COOKIE_NAME = "facebook_oauth_state";
 
 function redirectWithBanner(request: NextRequest, status: "connected" | "error", message?: string) {
-    const url = new URL("/", request.url);
+    const url = absoluteUrl("/", request);
     url.searchParams.set("view", "integrations");
     url.searchParams.set("facebook", status);
     if (message) url.searchParams.set("message", message);

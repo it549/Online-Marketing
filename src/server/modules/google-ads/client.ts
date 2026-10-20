@@ -1,8 +1,10 @@
 import { GoogleAdsApi } from "google-ads-api";
-import { config } from "@/server/configurations/config";
+import type { GoogleAdsAppCredentials } from "@/types/googleAds";
 
-export const googleAdsClient = new GoogleAdsApi({
-    client_id: config.google.clientID,
-    client_secret: config.google.clientSecret,
-    developer_token: config.google.develoerToken,
-});
+export function createGoogleAdsClient(app: GoogleAdsAppCredentials) {
+    return new GoogleAdsApi({
+        client_id: app.clientId,
+        client_secret: app.clientSecret,
+        developer_token: app.developerToken,
+    });
+}

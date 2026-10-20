@@ -26,6 +26,27 @@ export interface ShopeeTokenResult {
     expiresAt: Date;
 }
 
+/** Shopee sometimes answers with plain text (e.g. ERROR_SP_...) instead of JSON; surface it instead of a JSON parse crash. */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export async function parseShopeeJson(response: Response, path: string): Promise<ShopeeErrorBody & Record<string, any>> {
+    const text = await response.text();
+    try {
+        return JSON.parse(text);
+    } catch {
+        if (text.includes("ERROR_SP_SERVICE_NOT_FOUND")) {
+            throw new ShopeeApiError(
+                `แอป Shopee นี้ไม่มีสิทธิ์ใช้ API นี้ (${path}) — ตรวจ App Category (ต้องเป็น Ads Service สำหรับ /ads) และว่าไม่ได้ใช้ host sandbox`,
+            );
+        }
+        throw new ShopeeApiError(`Shopee ตอบกลับไม่ใช่ JSON (HTTP ${response.status}, ${path}): ${text.slice(0, 200)}`);
+    }
+}
+
+/** Token issued by a different Shopee app/environment than the one configured now is rejected with this. */
+export function isShopeeInvalidTokenError(body: ShopeeErrorBody): boolean {
+    return body.error === "invalid_acceess_token" || body.error === "invalid_access_token";
+}
+
 function assertNoShopeeError(body: ShopeeErrorBody, fallback: string): void {
     if (body.error) {
         throw new ShopeeApiError(body.message ? `${body.message} (${body.error})` : `${fallback}: ${body.error}`);
@@ -78,7 +99,7 @@ export async function exchangeShopeeCode(code: string, shopId: string): Promise<
         body: JSON.stringify({ code, shop_id: Number(shopId), partner_id: Number(config.shopee.partnerID) }),
     });
 
-    const body = await response.json();
+    const body = await parseShopeeJson(response, path);
     assertNoShopeeError(body, "ไม่สามารถแลก token จาก Shopee ได้");
 
     if (!body.access_token || !body.refresh_token) {
@@ -124,7 +145,7 @@ export async function refreshShopeeAccessToken(shopId: string, refreshToken: str
         body: JSON.stringify({ refresh_token: refreshToken, shop_id: Number(shopId), partner_id: Number(config.shopee.partnerID) }),
     });
 
-    const body = await response.json();
+    const body = await parseShopeeJson(response, path);
     assertNoShopeeError(body, "ไม่สามารถต่ออายุ token จาก Shopee ได้");
 
     if (!body.access_token || !body.refresh_token) {

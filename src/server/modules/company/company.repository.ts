@@ -10,7 +10,10 @@ function decryptCompany<T extends Company | null>(company: T): T {
         ...company,
         facebookAccessToken: decryptToken(company.facebookAccessToken),
         googleAdsRefreshToken: decryptToken(company.googleAdsRefreshToken),
+        googleAdsClientSecret: decryptToken(company.googleAdsClientSecret),
+        googleAdsDeveloperToken: decryptToken(company.googleAdsDeveloperToken),
         tiktokAccessToken: decryptToken(company.tiktokAccessToken),
+        tiktokAppSecret: decryptToken(company.tiktokAppSecret),
         shopeeAccessToken: decryptToken(company.shopeeAccessToken),
         shopeeRefreshToken: decryptToken(company.shopeeRefreshToken),
     };
@@ -64,10 +67,79 @@ export async function updateGoogleAdsConnection(
     });
 }
 
+// Blank secrets keep the stored value. The refresh token belongs to the OAuth client that
+// issued it, so it is dropped only when the client id changes.
+export async function saveGoogleAdsSettings(
+    companyId: bigint,
+    data: {
+        clientId: string;
+        clientSecret?: string;
+        developerToken?: string;
+        customerId: string | null;
+        loginCustomerId: string | null;
+    }
+): Promise<void> {
+    const current = await prisma.company.findUnique({
+        where: { id: companyId },
+        select: { googleAdsClientId: true },
+    });
+    await prisma.company.update({
+        where: { id: companyId },
+        data: {
+            googleAdsClientId: data.clientId,
+            googleAdsCustomerId: data.customerId,
+            googleAdsLoginCustomerId: data.loginCustomerId,
+            ...(data.clientSecret && { googleAdsClientSecret: encryptToken(data.clientSecret) }),
+            ...(data.developerToken && { googleAdsDeveloperToken: encryptToken(data.developerToken) }),
+            ...(current?.googleAdsClientId !== data.clientId && { googleAdsRefreshToken: null }),
+        },
+    });
+}
+
 export async function clearGoogleAdsConnection(companyId: bigint): Promise<void> {
     await prisma.company.update({
         where: { id: companyId },
         data: { googleAdsRefreshToken: null },
+    });
+}
+
+export async function updateTikTokConnection(
+    companyId: bigint,
+    data: { advertiserId: string; accessToken: string }
+): Promise<void> {
+    await prisma.company.update({
+        where: { id: companyId },
+        data: {
+            tiktokAdvertiserId: data.advertiserId,
+            tiktokAccessToken: encryptToken(data.accessToken),
+        },
+    });
+}
+
+// A blank secret keeps the stored value. The access token belongs to the app that issued it,
+// so it is dropped only when the app id changes.
+export async function saveTikTokSettings(
+    companyId: bigint,
+    data: { appId: string; appSecret?: string }
+): Promise<void> {
+    const current = await prisma.company.findUnique({
+        where: { id: companyId },
+        select: { tiktokAppId: true },
+    });
+    await prisma.company.update({
+        where: { id: companyId },
+        data: {
+            tiktokAppId: data.appId,
+            ...(data.appSecret && { tiktokAppSecret: encryptToken(data.appSecret) }),
+            ...(current?.tiktokAppId !== data.appId && { tiktokAdvertiserId: null, tiktokAccessToken: null }),
+        },
+    });
+}
+
+export async function clearTikTokConnection(companyId: bigint): Promise<void> {
+    await prisma.company.update({
+        where: { id: companyId },
+        data: { tiktokAdvertiserId: null, tiktokAccessToken: null },
     });
 }
 

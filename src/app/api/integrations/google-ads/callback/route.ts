@@ -1,12 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireAdmin } from "@/server/core/auth/api-guard";
 import { getSelectedCompanyId } from "@/server/core/company/selectedCompany";
+import { absoluteUrl } from "@/server/core/http/appUrl";
 import { connectGoogleAdsAccount } from "@/server/modules/google-ads/googleAdsIntegration.service";
 
 const STATE_COOKIE_NAME = "google_ads_oauth_state";
 
 function redirectWithBanner(request: NextRequest, status: "connected" | "error", message?: string) {
-    const url = new URL("/", request.url);
+    const url = absoluteUrl("/", request);
     url.searchParams.set("view", "integrations");
     url.searchParams.set("googleAds", status);
     if (message) url.searchParams.set("message", message);
