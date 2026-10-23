@@ -1,6 +1,6 @@
 import { config } from "@/server/configurations/config";
 import { ApiPerformanceResponse } from "@/types/apiPerformance";
-import { ShopeeApiError, ensureValidAccessToken, isShopeeInvalidTokenError, parseShopeeJson, type ShopeeCredentials } from "./shopeeAuth.service";
+import { ShopeeApiError, assertShopeeCallsAllowed, ensureValidAccessToken, isShopeeInvalidTokenError, parseShopeeJson, type ShopeeCredentials } from "./shopeeAuth.service";
 import { shopeeTimestamp, signShopeeRequest } from "./shopeeSign";
 import { getCompanyById } from "@/server/modules/company/company.repository";
 
@@ -46,6 +46,7 @@ export interface ShopeeApiEnvelope {
 }
 
 export async function shopeeShopGet(path: string, shopId: string, accessToken: string, params: Record<string, string> = {}): Promise<ShopeeApiEnvelope> {
+    assertShopeeCallsAllowed();
     const timestamp = shopeeTimestamp();
     const sign = signShopeeRequest(path, timestamp, { accessToken, shopId });
 

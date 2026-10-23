@@ -26,17 +26,39 @@ export interface ShopeeTokenResult {
     expiresAt: Date;
 }
 
+// Shopee suspends developers whose 7-day API success rate drops under 90%, so once Shopee says the
+// app is not allowed (bad IP / no permission) we stop calling for a while instead of failing on every page load.
+const SHOPEE_BLOCKING_ERRORS = new Set(["error_api_permission", "source_ip_undeclared"]);
+const SHOPEE_BLOCK_COOLDOWN_MS = 60 * 60 * 1000;
+let shopeeBlock: { until: number; message: string } | null = null;
+
+function blockShopeeCalls(message: string): void {
+    shopeeBlock = { until: Date.now() + SHOPEE_BLOCK_COOLDOWN_MS, message };
+}
+
+/** Throws without calling Shopee while a recent permission/IP rejection is still cooling down. */
+export function assertShopeeCallsAllowed(): void {
+    if (shopeeBlock && Date.now() < shopeeBlock.until) {
+        throw new ShopeeApiError(`${shopeeBlock.message} — พักการเรียก Shopee ชั่วคราวเพื่อไม่ให้อัตราสำเร็จของ API ลดลง (ลองใหม่ภายใน 1 ชั่วโมง หรือกดเชื่อมต่อ Shopee ใหม่)`);
+    }
+    shopeeBlock = null;
+}
+
 /** Shopee sometimes answers with plain text (e.g. ERROR_SP_...) instead of JSON; surface it instead of a JSON parse crash. */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export async function parseShopeeJson(response: Response, path: string): Promise<ShopeeErrorBody & Record<string, any>> {
     const text = await response.text();
     try {
-        return JSON.parse(text);
+        const body = JSON.parse(text);
+        if (body?.error && SHOPEE_BLOCKING_ERRORS.has(body.error)) {
+            blockShopeeCalls(body.message ? `${body.message} (${body.error})` : String(body.error));
+        }
+        return body;
     } catch {
         if (text.includes("ERROR_SP_SERVICE_NOT_FOUND")) {
-            throw new ShopeeApiError(
-                `แอป Shopee นี้ไม่มีสิทธิ์ใช้ API นี้ (${path}) — ตรวจ App Category (ต้องเป็น Ads Service สำหรับ /ads) และว่าไม่ได้ใช้ host sandbox`,
-            );
+            const message = `แอป Shopee นี้ไม่มีสิทธิ์ใช้ API นี้ (${path}) — ตรวจ App Category (ต้องเป็น Ads Service สำหรับ /ads) และว่าไม่ได้ใช้ host sandbox`;
+            blockShopeeCalls(message);
+            throw new ShopeeApiError(message);
         }
         throw new ShopeeApiError(`Shopee ตอบกลับไม่ใช่ JSON (HTTP ${response.status}, ${path}): ${text.slice(0, 200)}`);
     }
@@ -106,6 +128,9 @@ export async function exchangeShopeeCode(code: string, shopId: string): Promise<
         throw new ShopeeApiError("Shopee ไม่ได้ส่ง access_token/refresh_token กลับมา");
     }
 
+    // A fresh, successful authorization proves the app is allowed again.
+    shopeeBlock = null;
+
     return {
         shopId: String(body.shop_id ?? shopId),
         accessToken: body.access_token,
@@ -130,6 +155,7 @@ export async function ensureValidAccessToken(credentials: ShopeeCredentials): Pr
 
 /** Refreshes an expired/near-expiry access token using the stored refresh token. */
 export async function refreshShopeeAccessToken(shopId: string, refreshToken: string): Promise<ShopeeTokenResult> {
+    assertShopeeCallsAllowed();
     const path = "/api/v2/auth/access_token/get";
     const timestamp = shopeeTimestamp();
     const sign = signShopeeRequest(path, timestamp);
