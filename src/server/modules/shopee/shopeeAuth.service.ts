@@ -28,7 +28,8 @@ export interface ShopeeTokenResult {
 
 // Shopee suspends developers whose 7-day API success rate drops under 90%, so once Shopee says the
 // app is not allowed (bad IP / no permission) we stop calling for a while instead of failing on every page load.
-const SHOPEE_BLOCKING_ERRORS = new Set(["error_api_permission", "source_ip_undeclared"]);
+// A stored token Shopee rejects (invalid_acceess_token is Shopee's own spelling) fails identically on every call until the shop is reconnected.
+const SHOPEE_BLOCKING_ERRORS = new Set(["error_api_permission", "source_ip_undeclared", "invalid_acceess_token", "invalid_access_token"]);
 const SHOPEE_BLOCK_COOLDOWN_MS = 60 * 60 * 1000;
 let shopeeBlock: { until: number; message: string } | null = null;
 
