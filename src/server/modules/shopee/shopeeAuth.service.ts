@@ -5,6 +5,9 @@ import { shopeeTimestamp, signShopeeRequest } from "./shopeeSign";
 
 export class ShopeeApiError extends Error {}
 
+/** The stored access token is no longer accepted by Shopee; only reconnecting the shop can fix it. */
+export class ShopeeInvalidTokenError extends ShopeeApiError {}
+
 export interface ShopeeCredentials {
     companyId: bigint;
     shopId: string;
@@ -103,6 +106,19 @@ export async function connectShopeeAccount(companyId: bigint, code: string, shop
 
 export function disconnectShopeeAccount(companyId: bigint): Promise<unknown> {
     return clearShopeeCredentials(companyId);
+}
+
+/**
+ * A rejected stored token never recovers by itself, so drop it: the UI then shows "not connected"
+ * with a reconnect button and nothing keeps calling Shopee with a dead token.
+ */
+export async function handleShopeeAuthFailure(companyId: bigint, error: unknown): Promise<void> {
+    if (!(error instanceof ShopeeInvalidTokenError)) return;
+    try {
+        await clearShopeeCredentials(companyId);
+    } catch {
+        // Best effort: the call cooldown still prevents repeated failing requests.
+    }
 }
 
 /** Exchanges the OAuth `code` Shopee redirected back with for an access/refresh token pair. */

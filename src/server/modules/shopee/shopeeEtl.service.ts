@@ -1,7 +1,7 @@
 import type { Company } from "@prisma/client";
 import { saveEtlSyncResult } from "@/server/core/etl/etl-database.service";
 import type { NormalizedEtlSyncResult, PlatformSyncResult } from "@/server/core/etl/etl.types";
-import { ensureValidAccessToken, type ShopeeCredentials } from "./shopeeAuth.service";
+import { ensureValidAccessToken, handleShopeeAuthFailure, type ShopeeCredentials } from "./shopeeAuth.service";
 import { getShopeeCampaignPerformanceForDate } from "./shopeeEtl.repository";
 import { normalizeShopeeCampaignInsight, normalizeShopeeCampaignRef } from "./shopeeEtl.adapter";
 
@@ -31,6 +31,7 @@ export async function syncShopeeAdsForCompany(
         const accessToken = await ensureValidAccessToken(credentials);
         campaignRows = await getShopeeCampaignPerformanceForDate(credentials.shopId, accessToken, targetDate);
     } catch (error) {
+        await handleShopeeAuthFailure(company.id, error);
         return { status: "failed", reason: error instanceof Error ? error.message : String(error) };
     }
 

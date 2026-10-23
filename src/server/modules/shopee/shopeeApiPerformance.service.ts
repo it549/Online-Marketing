@@ -1,6 +1,15 @@
 import { config } from "@/server/configurations/config";
 import { ApiPerformanceResponse } from "@/types/apiPerformance";
-import { ShopeeApiError, assertShopeeCallsAllowed, ensureValidAccessToken, isShopeeInvalidTokenError, parseShopeeJson, type ShopeeCredentials } from "./shopeeAuth.service";
+import {
+    ShopeeApiError,
+    ShopeeInvalidTokenError,
+    assertShopeeCallsAllowed,
+    ensureValidAccessToken,
+    handleShopeeAuthFailure,
+    isShopeeInvalidTokenError,
+    parseShopeeJson,
+    type ShopeeCredentials,
+} from "./shopeeAuth.service";
 import { shopeeTimestamp, signShopeeRequest } from "./shopeeSign";
 import { getCompanyById } from "@/server/modules/company/company.repository";
 
@@ -62,7 +71,7 @@ export async function shopeeShopGet(path: string, shopId: string, accessToken: s
     const body = (await parseShopeeJson(response, path)) as ShopeeApiEnvelope;
 
     if (isShopeeInvalidTokenError(body)) {
-        throw new ShopeeApiError("Token Shopee ไม่ตรงกับแอปปัจจุบัน (เปลี่ยน partner_id/host หรือ token หมดอายุ) — กรุณาตัดการเชื่อมต่อแล้วเชื่อมต่อ Shopee ใหม่");
+        throw new ShopeeInvalidTokenError("Token Shopee ไม่ตรงกับแอปปัจจุบัน (เปลี่ยน partner_id/host หรือ token หมดอายุ) — ล้างการเชื่อมต่อเดิมแล้ว กรุณากดเชื่อมต่อ Shopee ใหม่");
     }
     if (body.error) {
         throw new ShopeeApiError(body.message ? `${body.message} (${body.error})` : `Shopee API error: ${body.error}`);
@@ -172,7 +181,25 @@ async function getShopeeAdsSummary(shopId: string, accessToken: string): Promise
     return { totalSpend, totalGmv, totalOrders, campaigns };
 }
 
+// Overview and the Shopee page both load this on every visit; Shopee ads data only moves a few times a day,
+// so reuse a recent successful result instead of spending 4 API calls per page view.
+const PERFORMANCE_CACHE_TTL_MS = 10 * 60 * 1000;
+const performanceCache = new Map<string, { at: number; value: ApiPerformanceResponse }>();
+
 export async function getShopeeApiPerformance(credentials: ShopeeCredentials | null): Promise<ApiPerformanceResponse> {
+    if (!credentials) return fetchShopeeApiPerformance(credentials);
+
+    const cacheKey = `${credentials.companyId}:${credentials.shopId}`;
+    const cached = performanceCache.get(cacheKey);
+    if (cached && Date.now() - cached.at < PERFORMANCE_CACHE_TTL_MS) return cached.value;
+
+    const value = await fetchShopeeApiPerformance(credentials);
+    if (value.connected) performanceCache.set(cacheKey, { at: Date.now(), value });
+    else performanceCache.delete(cacheKey);
+    return value;
+}
+
+async function fetchShopeeApiPerformance(credentials: ShopeeCredentials | null): Promise<ApiPerformanceResponse> {
     if (!credentials) {
         return {
             connected: false,
@@ -247,6 +274,7 @@ export async function getShopeeApiPerformance(credentials: ShopeeCredentials | n
             },
         };
     } catch (error) {
+        await handleShopeeAuthFailure(credentials.companyId, error);
         return {
             connected: false,
             lastSyncedAt: null,
