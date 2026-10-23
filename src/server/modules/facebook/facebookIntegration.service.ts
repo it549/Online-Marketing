@@ -11,7 +11,12 @@ export function createFacebookAuthorizationUrl(state: string): string {
     const authUrl = new URL(`https://www.facebook.com/${config.facebook.apiVersion}/dialog/oauth`);
     authUrl.searchParams.set("client_id", config.facebook.appId);
     authUrl.searchParams.set("redirect_uri", config.facebook.redirectUrl);
-    authUrl.searchParams.set("scope", FACEBOOK_SCOPE);
+    // Facebook Login for Business apps take permissions from a configuration, not `scope`.
+    if (config.facebook.loginConfigId) {
+        authUrl.searchParams.set("config_id", config.facebook.loginConfigId);
+    } else {
+        authUrl.searchParams.set("scope", FACEBOOK_SCOPE);
+    }
     authUrl.searchParams.set("state", state);
     authUrl.searchParams.set("response_type", "code");
     return authUrl.toString();
