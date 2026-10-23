@@ -18,6 +18,57 @@ interface Company {
     platforms: CompanyPlatformId[];
 }
 
+function FacebookAccountPicker({ onChanged }: { onChanged: () => void }) {
+    const [accounts, setAccounts] = useState<{ id: string; name: string }[]>([]);
+    const [selectedId, setSelectedId] = useState<string | null>(null);
+    const [saving, setSaving] = useState(false);
+
+    useEffect(() => {
+        fetch("/api/integrations/facebook/accounts")
+            .then((response) => (response.ok ? response.json() : null))
+            .then((data) => {
+                if (!data) return;
+                setAccounts(data.accounts ?? []);
+                setSelectedId(data.selectedId ?? null);
+            })
+            .catch(() => undefined);
+    }, []);
+
+    if (accounts.length < 2) return null;
+
+    async function handleChange(adAccountId: string) {
+        setSaving(true);
+        try {
+            const response = await fetch("/api/integrations/facebook/accounts", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ adAccountId }),
+            });
+            if (response.ok) {
+                setSelectedId(adAccountId);
+                onChanged();
+            }
+        } finally {
+            setSaving(false);
+        }
+    }
+
+    return (
+        <select
+            value={selectedId ?? ""}
+            disabled={saving}
+            onChange={(event) => handleChange(event.target.value)}
+            className="w-full rounded-lg border border-gray-200 bg-white px-2 py-1.5 text-xs text-gray-700 disabled:opacity-50"
+        >
+            {accounts.map((account) => (
+                <option key={account.id} value={account.id}>
+                    {account.name} ({account.id})
+                </option>
+            ))}
+        </select>
+    );
+}
+
 interface PlatformCardProps {
     name: string;
     icon: string;
@@ -508,7 +559,9 @@ export default function IntegrationsPage() {
                         }
                         action={
                             facebook.data?.connected ? (
-                                <div className="flex items-center gap-2">
+                                <div className="flex flex-col gap-2">
+                                    <FacebookAccountPicker onChanged={facebook.refetch} />
+                                    <div className="flex items-center gap-2">
                                     <RetryButton label="ซิงค์ข้อมูลใหม่" loading={facebook.loading} onClick={facebook.refetch} />
                                     <button
                                         onClick={handleFacebookDisconnect}
@@ -518,6 +571,7 @@ export default function IntegrationsPage() {
                                         <Unplug className="h-3.5 w-3.5" strokeWidth={2} />
                                         ยกเลิกการเชื่อมต่อ
                                     </button>
+                                    </div>
                                 </div>
                             ) : (
 

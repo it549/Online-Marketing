@@ -167,3 +167,10 @@ export async function clearFacebookConnection(companyId: bigint): Promise<void> 
         },
     });
 }
+
+export async function updateFacebookAdAccountId(companyId: bigint, adAccountId: string): Promise<void> {
+    await prisma.company.update({
+        where: { id: companyId },
+        data: { facebookAdAccountId: adAccountId },
+    });
+}

@@ -1,5 +1,10 @@
 import { config } from "@/server/configurations/config";
-import { updateFacebookConnection, clearFacebookConnection } from "@/server/modules/company/company.repository";
+import {
+    getCompanyById,
+    updateFacebookConnection,
+    clearFacebookConnection,
+    updateFacebookAdAccountId,
+} from "@/server/modules/company/company.repository";
 
 const FACEBOOK_SCOPE = "ads_read";
 
@@ -56,7 +61,11 @@ export async function connectFacebookAccount(
         return { ok: false, message: "No accessible Facebook Ad Account was found." };
     }
 
-    const selectedAccount = adAccounts[0];
+    const grantedAccountIds = await getGrantedAdAccountIds(baseUrl, longLivedData.access_token);
+    const selectedAccount =
+        adAccounts.find((account) => account.id === config.facebook.adAccountId) ??
+        adAccounts.find((account) => grantedAccountIds.includes(String((account as { account_id?: string }).account_id))) ??
+        adAccounts[0];
     const expiresInSeconds = Number(longLivedData.expires_in ?? 60 * 60 * 24 * 60);
     await updateFacebookConnection(companyId, {
         adAccountId: selectedAccount.id,
@@ -65,6 +74,54 @@ export async function connectFacebookAccount(
     });
 
     return { ok: true, accountName: selectedAccount.name, accountCount: adAccounts.length };
+}
+
+// Ad accounts the user picked in Meta's consent dialog (granular scope targets of ads_read/ads_management).
+async function getGrantedAdAccountIds(baseUrl: string, userToken: string): Promise<string[]> {
+    try {
+        const debugUrl = new URL(`${baseUrl}/debug_token`);
+        debugUrl.searchParams.set("input_token", userToken);
+        debugUrl.searchParams.set("access_token", `${config.facebook.appId}|${config.facebook.appSecret}`);
+        const response = await fetch(debugUrl.toString());
+        const body = await response.json();
+        const scopes = (body?.data?.granular_scopes ?? []) as Array<{ scope: string; target_ids?: string[] }>;
+        return scopes
+            .filter((entry) => entry.scope === "ads_read" || entry.scope === "ads_management")
+            .flatMap((entry) => entry.target_ids ?? []);
+    } catch {
+        return [];
+    }
+}
+
+export type FacebookAdAccountOption = { id: string; name: string };
+
+async function fetchAdAccounts(accessToken: string): Promise<FacebookAdAccountOption[]> {
+    const url = new URL(`${config.facebook.baseUrl}/${config.facebook.apiVersion}/me/adaccounts`);
+    url.searchParams.set("fields", "id,name,account_id");
+    url.searchParams.set("limit", "100");
+    url.searchParams.set("access_token", accessToken);
+    const response = await fetch(url.toString(), { cache: "no-store" });
+    const body = await response.json();
+    if (!response.ok) throw new Error(body?.error?.message ?? "Unable to load Facebook ad accounts.");
+    return ((body.data ?? []) as FacebookAdAccountOption[]).map(({ id, name }) => ({ id, name }));
+}
+
+export async function listFacebookAdAccounts(
+    companyId: bigint,
+): Promise<{ selectedId: string | null; accounts: FacebookAdAccountOption[] }> {
+    const company = await getCompanyById(companyId);
+    if (!company?.facebookAccessToken) return { selectedId: null, accounts: [] };
+    return {
+        selectedId: company.facebookAdAccountId,
+        accounts: await fetchAdAccounts(company.facebookAccessToken),
+    };
+}
+
+export async function selectFacebookAdAccount(companyId: bigint, adAccountId: string): Promise<boolean> {
+    const { accounts } = await listFacebookAdAccounts(companyId);
+    if (!accounts.some((account) => account.id === adAccountId)) return false;
+    await updateFacebookAdAccountId(companyId, adAccountId);
+    return true;
 }
 
 export function disconnectFacebookAccount(companyId: bigint): Promise<void> {

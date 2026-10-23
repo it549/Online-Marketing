@@ -5,7 +5,7 @@ import { getFacebookCampaignRepository } from "./facebook.repository";
 import { ApiPerformanceResponse } from "@/types/apiPerformance";
 import { getCompanyById } from "@/server/modules/company/company.repository";
 
-const DATE_PRESET_LABEL = "30 วันล่าสุด";
+const DATE_PRESET_LABEL = "ตลอดอายุแคมเปญ";
 
 export interface FacebookAdAccountCredentials {
     adAccountId: string;
@@ -38,7 +38,7 @@ export async function getFacebookApiPerformance(credentials: FacebookAdAccountCr
             apiVersion: config.facebook.apiVersion,
             accessToken: credentials.accessToken,
             adAccountId: credentials.adAccountId,
-            datePreset: "last_30d",
+            datePreset: "maximum",
         };
 
         const raw: MetaCampaignResponse = await getFacebookCampaignRepository(params);
