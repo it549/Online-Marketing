@@ -3,7 +3,7 @@ import type { NextRequest } from "next/server";
 import { SESSION_COOKIE_NAME, verifySessionToken } from "@/server/core/auth/session";
 import { absoluteUrl } from "@/server/core/http/appUrl";
 
-const PUBLIC_PATHS = ["/login", "/api/auth/login", "/api/auth/logout"];
+const PUBLIC_PATHS = ["/login", "/privacy", "/terms","/api/auth/login", "/api/auth/logout"];
 
 // OAuth provider callbacks are top-level browser navigations, not fetch calls from our own
 // frontend -- on missing/expired session they must redirect (like a page route) instead of

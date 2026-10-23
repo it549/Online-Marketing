@@ -108,6 +108,11 @@ export default function LoginForm() {
             <p className="mt-4 text-center text-xs text-slate-400">
                 เข้าสู่ระบบเดียว ใช้จัดการข้อมูลได้ทุกบริษัทที่คุณดูแล
             </p>
+            <p className="mt-2 text-center text-xs text-slate-400">
+                <a href="/privacy" className="hover:text-indigo-600">นโยบายความเป็นส่วนตัว</a>
+                {" · "}
+                <a href="/terms" className="hover:text-indigo-600">ข้อกำหนดการใช้บริการ</a>
+            </p>
         </div>
     );
 }
