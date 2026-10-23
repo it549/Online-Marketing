@@ -8,6 +8,30 @@ import { getSpendTrend, getLeadsSummaryOnly } from "@/server/modules/insights/in
 import { OverviewCampaignRow, OverviewInsightResponse, OverviewPlatformSummary, OverviewResponse } from "@/types/overview";
 import { ApiPerformanceResponse } from "@/types/apiPerformance";
 import type { SpendTrendPoint } from "@/types/insights";
+import type { CompanyPlatformId } from "@/types/company";
+
+const SYNCED_LABEL = "ข้อมูลที่ซิงค์ไว้ (30 วันล่าสุด)";
+
+async function getSyncedPlatformTotals(companyId: bigint, platform: CompanyPlatformId, dateFrom: Date, dateTo: Date) {
+    const trend = await getSpendTrend(companyId, platform, dateFrom, dateTo);
+    const spend = trend.points.reduce((sum, p) => sum + p.spend, 0);
+    const conversions = trend.points.reduce((sum, p) => sum + p.conversions, 0);
+    const conversionsValue = trend.points.reduce((sum, p) => sum + p.conversionsValue, 0);
+    return {
+        hasData: trend.hasDataInRange,
+        spend,
+        conversions,
+        conversionsValue,
+        roas: spend > 0 && conversionsValue > 0 ? conversionsValue / spend : null,
+    };
+}
+
+async function getSyncedTotals(companyId: bigint, dateFrom: Date, dateTo: Date) {
+    const [facebook, shopee, tiktok, googleAds] = await Promise.all(
+        (["facebook", "shopee", "tiktok", "googleAds"] as const).map((platform) => getSyncedPlatformTotals(companyId, platform, dateFrom, dateTo)),
+    );
+    return { facebook, shopee, tiktok, googleAds };
+}
 
 export async function getOverview(companyId: bigint): Promise<OverviewResponse> {
     const company = await getCompanyById(companyId);
@@ -50,19 +74,28 @@ export async function getOverview(companyId: bigint): Promise<OverviewResponse> 
         hasGoogleAds ? getGoogleAdsApiPerformance(googleAdsCredentials) : Promise.resolve<ApiPerformanceResponse | null>(null),
     ]);
 
-    const fbSpend = facebook.connected ? facebook.summary?.spend ?? 0 : 0;
-    const fbLeads = facebook.connected ? facebook.summary?.leads ?? 0 : 0;
-    const fbRoas = facebook.connected ? facebook.summary?.roas ?? null : null;
+    // Live APIs can be unconnected/rejected while ETL has already synced data -- fall back to ad_insights (last 30d).
+    const syncedTo = new Date(new Date().toISOString().slice(0, 10));
+    const syncedFrom = new Date(syncedTo.getTime() - 29 * 24 * 60 * 60 * 1000);
+    const synced = await getSyncedTotals(companyId, syncedFrom, syncedTo);
 
-    const shopeeSpend = shopee?.connected ? shopee.summary?.spend ?? 0 : 0;
-    const shopeeRevenue = shopee?.connected ? shopee.summary?.revenue ?? null : null;
-    const shopeeRoas = shopee?.connected ? shopee.summary?.roas ?? null : null;
+    const fbLive = facebook.connected;
+    const fbSpend = fbLive ? facebook.summary?.spend ?? 0 : synced.facebook.spend;
+    const fbLeads = fbLive ? facebook.summary?.leads ?? 0 : synced.facebook.conversions;
+    const fbRoas = fbLive ? facebook.summary?.roas ?? null : synced.facebook.roas;
 
-    const tiktokSpend = tiktok?.connected ? tiktok.summary?.spend ?? 0 : 0;
-    const tiktokLeads = tiktok?.connected ? tiktok.summary?.leads ?? 0 : 0;
+    const shopeeLive = shopee?.connected ?? false;
+    const shopeeSpend = shopeeLive ? shopee?.summary?.spend ?? 0 : synced.shopee.spend;
+    const shopeeRevenue = shopeeLive ? shopee?.summary?.revenue ?? null : synced.shopee.hasData ? synced.shopee.conversionsValue : null;
+    const shopeeRoas = shopeeLive ? shopee?.summary?.roas ?? null : synced.shopee.roas;
 
-    const googleAdsSpend = googleAds?.connected ? googleAds.summary?.spend ?? 0 : 0;
-    const googleAdsLeads = googleAds?.connected ? googleAds.summary?.leads ?? 0 : 0;
+    const tiktokLive = tiktok?.connected ?? false;
+    const tiktokSpend = tiktokLive ? tiktok?.summary?.spend ?? 0 : synced.tiktok.spend;
+    const tiktokLeads = tiktokLive ? tiktok?.summary?.leads ?? 0 : synced.tiktok.conversions;
+
+    const googleAdsLive = googleAds?.connected ?? false;
+    const googleAdsSpend = googleAdsLive ? googleAds?.summary?.spend ?? 0 : synced.googleAds.spend;
+    const googleAdsLeads = googleAdsLive ? googleAds?.summary?.leads ?? 0 : synced.googleAds.conversions;
 
     const totalSpend = fbSpend + shopeeSpend + tiktokSpend + googleAdsSpend;
     const totalLeads = fbLeads + tiktokLeads + googleAdsLeads;
@@ -86,11 +119,11 @@ export async function getOverview(companyId: bigint): Promise<OverviewResponse> 
             name: "Facebook",
             icon: "/icons/facebook.svg",
             sourceType: "api",
-            hasData: facebook.connected,
+            hasData: fbLive || synced.facebook.hasData,
             spend: fbSpend,
             revenue: null,
             roas: fbRoas,
-            statusLabel: facebook.connected ? "เชื่อมต่อ API แล้ว" : "ยังไม่ได้เชื่อมต่อ API",
+            statusLabel: fbLive ? "เชื่อมต่อ API แล้ว" : synced.facebook.hasData ? SYNCED_LABEL : "ยังไม่ได้เชื่อมต่อ API",
         },
         hasShopee
             ? {
@@ -98,11 +131,11 @@ export async function getOverview(companyId: bigint): Promise<OverviewResponse> 
                   name: "Shopee",
                   icon: "/icons/shopee.svg",
                   sourceType: "api",
-                  hasData: shopee?.connected ?? false,
+                  hasData: shopeeLive || synced.shopee.hasData,
                   spend: shopeeSpend,
                   revenue: shopeeRevenue,
                   roas: shopeeRoas,
-                  statusLabel: shopee?.connected ? "เชื่อมต่อ API แล้ว" : shopee?.error ?? "ยังไม่ได้เชื่อมต่อ API",
+                  statusLabel: shopeeLive ? "เชื่อมต่อ API แล้ว" : synced.shopee.hasData ? SYNCED_LABEL : shopee?.error ?? "ยังไม่ได้เชื่อมต่อ API",
               }
             : null,
         hasTikTok
@@ -111,11 +144,11 @@ export async function getOverview(companyId: bigint): Promise<OverviewResponse> 
                   name: "TikTok",
                   icon: "/icons/tiktok.svg",
                   sourceType: "api",
-                  hasData: tiktok?.connected ?? false,
+                  hasData: tiktokLive || synced.tiktok.hasData,
                   spend: tiktokSpend,
                   revenue: null,
                   roas: null,
-                  statusLabel: tiktok?.connected ? "เชื่อมต่อ API แล้ว" : tiktok?.error ?? "ยังไม่ได้เชื่อมต่อ API",
+                  statusLabel: tiktokLive ? "เชื่อมต่อ API แล้ว" : synced.tiktok.hasData ? SYNCED_LABEL : tiktok?.error ?? "ยังไม่ได้เชื่อมต่อ API",
               }
             : null,
         hasGoogleAds
@@ -124,11 +157,11 @@ export async function getOverview(companyId: bigint): Promise<OverviewResponse> 
                   name: "Google Ads",
                   icon: "/icons/google-ads.svg",
                   sourceType: "api",
-                  hasData: googleAds?.connected ?? false,
+                  hasData: googleAdsLive || synced.googleAds.hasData,
                   spend: googleAdsSpend,
                   revenue: null,
                   roas: null,
-                  statusLabel: googleAds?.connected ? "เชื่อมต่อ API แล้ว" : googleAds?.error ?? "ยังไม่ได้เชื่อมต่อ API",
+                  statusLabel: googleAdsLive ? "เชื่อมต่อ API แล้ว" : synced.googleAds.hasData ? SYNCED_LABEL : googleAds?.error ?? "ยังไม่ได้เชื่อมต่อ API",
               }
             : null,
     ];
