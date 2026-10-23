@@ -43,7 +43,19 @@ export async function connectTikTokAccount(companyId: bigint, authCode: string):
         return { ok: false, message: body?.message ?? "Unable to exchange the TikTok authorization code." };
     }
 
-    const advertiserIds: string[] = (body.data.advertiser_ids ?? []).map(String);
+    // v1.3 no longer returns advertiser_ids from the token exchange; fetch the authorized accounts separately.
+    let advertiserIds: string[] = (body.data.advertiser_ids ?? []).map(String);
+    if (!advertiserIds.length) {
+        const listUrl = new URL(`${TIKTOK_API_BASE_URL}/oauth2/advertiser/get/`);
+        listUrl.searchParams.set("app_id", appId);
+        listUrl.searchParams.set("secret", appSecret);
+        const listResponse = await fetch(listUrl.toString(), { headers: { "Access-Token": accessToken } });
+        const listBody = await listResponse.json();
+        if (!listResponse.ok || listBody?.code !== 0) {
+            return { ok: false, message: listBody?.message ?? "Unable to list authorized TikTok Advertiser accounts." };
+        }
+        advertiserIds = ((listBody.data?.list ?? []) as { advertiser_id: string | number }[]).map((a) => String(a.advertiser_id));
+    }
     if (!advertiserIds.length) {
         return { ok: false, message: "No accessible TikTok Advertiser account was found." };
     }
