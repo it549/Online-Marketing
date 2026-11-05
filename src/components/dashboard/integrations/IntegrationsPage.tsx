@@ -316,8 +316,6 @@ type CallbackBanner = { tone: "success" | "error"; message: string } | null;
 
 /** Reads the one-time OAuth-callback result out of the URL (e.g. `?shopee=connected`). */
 function getInitialCallbackBanner(): CallbackBanner {
-    if (typeof window === "undefined") return null;
-
     const params = new URLSearchParams(window.location.search);
     const shopeeStatus = params.get("shopee");
     const googleAdsStatus = params.get("googleAds");
@@ -370,7 +368,8 @@ export default function IntegrationsPage() {
     const [switching, setSwitching] = useState(false);
     const [disconnecting, setDisconnecting] = useState(false);
 
-    const [callbackBanner, setCallbackBanner] = useState<CallbackBanner>(getInitialCallbackBanner);
+    // Starts null and is read from the URL after mount: the server render has no window, so reading it in useState causes a hydration mismatch (React #418).
+    const [callbackBanner, setCallbackBanner] = useState<CallbackBanner>(null);
 
     useEffect(() => {
         fetch("/api/company")
@@ -384,6 +383,9 @@ export default function IntegrationsPage() {
 
     // Strip the one-time OAuth-callback query params so a page refresh doesn't re-show the banner.
     useEffect(() => {
+        const banner = getInitialCallbackBanner();
+        void Promise.resolve().then(() => setCallbackBanner(banner));
+
         const params = new URLSearchParams(window.location.search);
         if (!params.has("shopee") && !params.has("googleAds") && !params.has("facebook") && !params.has("tiktok")) return;
 
