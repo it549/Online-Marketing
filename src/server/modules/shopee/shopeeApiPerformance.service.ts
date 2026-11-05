@@ -251,6 +251,8 @@ async function getShopeeAdsSummary(shopId: string, accessToken: string): Promise
 // so reuse a recent successful result instead of spending 4 API calls per page view.
 const PERFORMANCE_CACHE_TTL_MS = 10 * 60 * 1000;
 const performanceCache = new Map<string, { at: number; value: ApiPerformanceResponse }>();
+// Overview, the Shopee page and Integrations can load at the same moment; share one burst of Shopee calls instead of one each (error_rate_limit).
+const performanceInFlight = new Map<string, Promise<ApiPerformanceResponse>>();
 
 export async function getShopeeApiPerformance(credentials: ShopeeCredentials | null): Promise<ApiPerformanceResponse> {
     if (!credentials) return fetchShopeeApiPerformance(credentials);
@@ -259,10 +261,18 @@ export async function getShopeeApiPerformance(credentials: ShopeeCredentials | n
     const cached = performanceCache.get(cacheKey);
     if (cached && Date.now() - cached.at < PERFORMANCE_CACHE_TTL_MS) return cached.value;
 
-    const value = await fetchShopeeApiPerformance(credentials);
-    if (value.connected) performanceCache.set(cacheKey, { at: Date.now(), value });
-    else performanceCache.delete(cacheKey);
-    return value;
+    const pending = performanceInFlight.get(cacheKey);
+    if (pending) return pending;
+
+    const request = fetchShopeeApiPerformance(credentials)
+        .then((value) => {
+            if (value.connected) performanceCache.set(cacheKey, { at: Date.now(), value });
+            else performanceCache.delete(cacheKey);
+            return value;
+        })
+        .finally(() => performanceInFlight.delete(cacheKey));
+    performanceInFlight.set(cacheKey, request);
+    return request;
 }
 
 async function fetchShopeeApiPerformance(credentials: ShopeeCredentials | null): Promise<ApiPerformanceResponse> {
