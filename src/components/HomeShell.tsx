@@ -1,5 +1,5 @@
 "use client";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Image from "next/image";
 import {
     LayoutDashboard,
@@ -42,7 +42,6 @@ const VALID_VIEWS: View[] = ["overview", "facebook", "shopee", "tiktok", "google
  * `?view=insights` links (bookmarks, shares) fall back to Overview instead of breaking.
  */
 function getInitialView(): View {
-    if (typeof window === "undefined") return "overview";
     const requested = new URLSearchParams(window.location.search).get("view");
     return VALID_VIEWS.includes(requested as View) ? (requested as View) : "overview";
 }
@@ -72,7 +71,11 @@ interface Props {
 }
 
 export default function HomeShell({ userEmail }: Props) {
-    const [activeView, setActiveView] = useState<View>(getInitialView);
+    // Server render has no URL query, so start on Overview and apply `?view=` after mount (reading window in useState = React #418 hydration mismatch).
+    const [activeView, setActiveView] = useState<View>("overview");
+    useEffect(() => {
+        void Promise.resolve().then(() => setActiveView(getInitialView()));
+    }, []);
     const [dashboardExpanded, setDashboardExpanded] = useState(true);
     const [collapsed, setCollapsed] = useState(false);
     const [mobileOpen, setMobileOpen] = useState(false);

@@ -131,6 +131,8 @@ export async function getShopeeAuthorizationUrlForCompany(companyId: bigint): Pr
 
 export async function connectShopeeAccount(companyId: bigint, code: string, shopId: string): Promise<void> {
     await saveShopeeCredentials(companyId, await exchangeShopeeCode(code, shopId));
+    // A fresh token supersedes whatever rejection started the cooldown; otherwise the very next status check is blocked for up to 1h.
+    shopeeBlock = null;
 }
 
 export function disconnectShopeeAccount(companyId: bigint): Promise<unknown> {
