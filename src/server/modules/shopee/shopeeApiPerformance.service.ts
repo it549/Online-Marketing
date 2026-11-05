@@ -35,7 +35,9 @@ export async function getShopeeApiPerformanceForCompany(companyId: bigint): Prom
 // therefore spans 31 full days and gets rejected with "date range too long". 28 days
 // keeps a safety margin regardless of which calendar month(s) the window falls in.
 const ADS_LOOKBACK_DAYS = 28;
-const ADS_DATE_RANGE_LABEL = `${ADS_LOOKBACK_DAYS} วันล่าสุด`;
+// Longer history is fetched by walking back window-by-window (see getShopeeAdsSummary), up to ~1 year.
+const ADS_MAX_WINDOWS = 13;
+const ADS_DATE_RANGE_LABEL = "ตั้งแต่เริ่มแคมเปญ";
 
 // Shopee's Ads API only returns performance for product-level campaigns fetched in one call;
 // shops running more than this many campaigns will only see the first page in the table below
@@ -87,6 +89,17 @@ function formatShopeeAdsDate(date: Date): string {
     return `${dd}-${mm}-${date.getUTCFullYear()}`;
 }
 
+interface ShopeeCampaignSetting {
+    campaign_id: number;
+    common_info?: { campaign_duration?: { start_time?: number; end_time?: number } };
+}
+
+/** Shopee uses unix seconds, with 0 / missing meaning "no date" (e.g. an open-ended campaign). */
+function formatShopeeUnixDate(seconds?: number): string {
+    if (!seconds) return "-";
+    return new Date((seconds + 7 * 3600) * 1000).toISOString().slice(0, 10);
+}
+
 interface ShopeeAdsDailyPoint {
     expense: number;
     broad_gmv: number;
@@ -124,22 +137,13 @@ interface ShopeeAdsSummary {
         orders: number;
         profitLoss: number;
         roas: number | null;
+        startDate: string;
+        endDate: string;
     }[];
 }
 
-/** Pulls shop-wide ad spend/GMV totals plus a per-campaign breakdown for the last ADS_LOOKBACK_DAYS days. */
+/** Pulls shop-wide ad spend/GMV totals plus a per-campaign breakdown since the ads started (ADS_LOOKBACK_DAYS windows). */
 async function getShopeeAdsSummary(shopId: string, accessToken: string): Promise<ShopeeAdsSummary> {
-    const endDate = new Date();
-    const startDate = new Date(endDate.getTime() - ADS_LOOKBACK_DAYS * 24 * 60 * 60 * 1000);
-    const dateParams = { start_date: formatShopeeAdsDate(startDate), end_date: formatShopeeAdsDate(endDate) };
-
-    const shopLevel = await shopeeShopGet("/api/v2/ads/get_all_cpc_ads_daily_performance", shopId, accessToken, dateParams);
-    const dailyPoints = (shopLevel.response as unknown as ShopeeAdsDailyPoint[] | undefined) ?? [];
-
-    const totalSpend = dailyPoints.reduce((sum, point) => sum + (point.expense ?? 0), 0);
-    const totalGmv = dailyPoints.reduce((sum, point) => sum + (point.broad_gmv ?? 0), 0);
-    const totalOrders = dailyPoints.reduce((sum, point) => sum + (point.broad_order ?? 0), 0);
-
     const campaignIdList = await shopeeShopGet("/api/v2/ads/get_product_level_campaign_id_list", shopId, accessToken, {
         ad_type: "all",
         offset: "0",
@@ -148,37 +152,87 @@ async function getShopeeAdsSummary(shopId: string, accessToken: string): Promise
     const campaignEntries =
         ((campaignIdList.response as { campaign_list?: ShopeeCampaignIdEntry[] } | undefined)?.campaign_list) ?? [];
 
-    if (campaignEntries.length === 0) {
-        return { totalSpend, totalGmv, totalOrders, campaigns: [] };
+    const campaignIds = campaignEntries.map((entry) => entry.campaign_id).join(",");
+
+    let totalSpend = 0;
+    let totalGmv = 0;
+    let totalOrders = 0;
+    const campaignMap = new Map<number, ShopeeAdsSummary["campaigns"][number]>();
+
+    // Walk backwards one window at a time until a window has no ad spend (campaigns started
+    // after it) or the safety cap is hit -- every window is a separate API call.
+    const dayMs = 24 * 60 * 60 * 1000;
+    let windowEnd = new Date();
+    for (let i = 0; i < ADS_MAX_WINDOWS; i++) {
+        const windowStart = new Date(windowEnd.getTime() - ADS_LOOKBACK_DAYS * dayMs);
+        const dateParams = { start_date: formatShopeeAdsDate(windowStart), end_date: formatShopeeAdsDate(windowEnd) };
+
+        const shopLevel = await shopeeShopGet("/api/v2/ads/get_all_cpc_ads_daily_performance", shopId, accessToken, dateParams);
+        const dailyPoints = (shopLevel.response as unknown as ShopeeAdsDailyPoint[] | undefined) ?? [];
+        const windowSpend = dailyPoints.reduce((sum, point) => sum + (point.expense ?? 0), 0);
+        if (i > 0 && windowSpend === 0) break;
+
+        totalSpend += windowSpend;
+        totalGmv += dailyPoints.reduce((sum, point) => sum + (point.broad_gmv ?? 0), 0);
+        totalOrders += dailyPoints.reduce((sum, point) => sum + (point.broad_order ?? 0), 0);
+
+        if (campaignEntries.length > 0) {
+            const campaignPerformance = await shopeeShopGet("/api/v2/ads/get_product_campaign_daily_performance", shopId, accessToken, {
+                ...dateParams,
+                campaign_id_list: campaignIds,
+            });
+            const shopBlocks =
+                (campaignPerformance.response as unknown as { campaign_list?: ShopeeCampaignPerformance[] }[] | undefined) ?? [];
+
+            for (const campaign of shopBlocks.flatMap((block) => block.campaign_list ?? [])) {
+                const spend = campaign.metrics_list.reduce((sum, point) => sum + (point.expense ?? 0), 0);
+                const gmv = campaign.metrics_list.reduce((sum, point) => sum + (point.broad_gmv ?? 0), 0);
+                const orders = campaign.metrics_list.reduce((sum, point) => sum + (point.broad_order ?? 0), 0);
+                const previous = campaignMap.get(campaign.campaign_id);
+                const totalCampaignSpend = (previous?.spend ?? 0) + spend;
+                const totalCampaignGmv = (previous?.gmv ?? 0) + gmv;
+
+                campaignMap.set(campaign.campaign_id, {
+                    id: String(campaign.campaign_id),
+                    name: campaign.ad_name || `แคมเปญ #${campaign.campaign_id}`,
+                    adType: AD_TYPE_LABEL_TH[campaign.ad_type] ?? campaign.ad_type,
+                    spend: totalCampaignSpend,
+                    gmv: totalCampaignGmv,
+                    orders: (previous?.orders ?? 0) + orders,
+                    profitLoss: totalCampaignGmv - totalCampaignSpend,
+                    roas: totalCampaignSpend > 0 ? totalCampaignGmv / totalCampaignSpend : null,
+                    startDate: "-",
+                    endDate: "-",
+                });
+            }
+        }
+
+        windowEnd = new Date(windowStart.getTime() - dayMs);
     }
 
-    const campaignPerformance = await shopeeShopGet("/api/v2/ads/get_product_campaign_daily_performance", shopId, accessToken, {
-        ...dateParams,
-        campaign_id_list: campaignEntries.map((entry) => entry.campaign_id).join(","),
-    });
+    // Start/stop dates are cosmetic -- a failure here must not hide the performance numbers.
+    if (campaignEntries.length > 0) {
+        try {
+            const settings = await shopeeShopGet("/api/v2/ads/get_product_level_campaign_setting_info", shopId, accessToken, {
+                info_type_list: "1",
+                campaign_id_list: campaignIds,
+            });
+            const settingList =
+                (settings.response as { campaign_list?: ShopeeCampaignSetting[] } | undefined)?.campaign_list ?? [];
+            for (const setting of settingList) {
+                const campaign = campaignMap.get(setting.campaign_id);
+                const duration = setting.common_info?.campaign_duration;
+                if (!campaign || !duration) continue;
+                campaign.startDate = formatShopeeUnixDate(duration.start_time);
+                campaign.endDate = formatShopeeUnixDate(duration.end_time);
+            }
+        } catch (error) {
+            if (error instanceof ShopeeInvalidTokenError) throw error;
+            console.warn("Shopee campaign setting info failed:", error);
+        }
+    }
 
-    const shopBlocks =
-        (campaignPerformance.response as unknown as { campaign_list?: ShopeeCampaignPerformance[] }[] | undefined) ?? [];
-    const campaignList = shopBlocks.flatMap((block) => block.campaign_list ?? []);
-
-    const campaigns = campaignList.map((campaign) => {
-        const spend = campaign.metrics_list.reduce((sum, point) => sum + (point.expense ?? 0), 0);
-        const gmv = campaign.metrics_list.reduce((sum, point) => sum + (point.broad_gmv ?? 0), 0);
-        const orders = campaign.metrics_list.reduce((sum, point) => sum + (point.broad_order ?? 0), 0);
-
-        return {
-            id: String(campaign.campaign_id),
-            name: campaign.ad_name || `แคมเปญ #${campaign.campaign_id}`,
-            adType: AD_TYPE_LABEL_TH[campaign.ad_type] ?? campaign.ad_type,
-            spend,
-            gmv,
-            orders,
-            profitLoss: gmv - spend,
-            roas: spend > 0 ? gmv / spend : null,
-        };
-    });
-
-    return { totalSpend, totalGmv, totalOrders, campaigns };
+    return { totalSpend, totalGmv, totalOrders, campaigns: [...campaignMap.values()] };
 }
 
 // Overview and the Shopee page both load this on every visit; Shopee ads data only moves a few times a day,
@@ -214,9 +268,7 @@ async function fetchShopeeApiPerformance(credentials: ShopeeCredentials | null):
     try {
         const accessToken = await ensureValidAccessToken(credentials);
 
-        // Confirms the token is genuinely usable against this shop before pulling anything else.
-        await shopeeShopGet("/api/v2/shop/get_shop_info", credentials.shopId, accessToken);
-
+        // No separate get_shop_info probe: the ads calls below reject a bad token themselves, and every extra call counts toward Shopee's 90% success-rate rule.
         const ads = await getShopeeAdsSummary(credentials.shopId, accessToken);
 
         const profitLoss = ads.totalGmv - ads.totalSpend;
@@ -255,6 +307,8 @@ async function fetchShopeeApiPerformance(credentials: ShopeeCredentials | null):
                 columns: [
                     { key: "name", label: "แคมเปญ" },
                     { key: "adType", label: "ประเภท", align: "center" },
+                    { key: "startDate", label: "เริ่ม", align: "center" },
+                    { key: "endDate", label: "หยุด", align: "center" },
                     { key: "spend", label: "ยอดใช้จ่าย", align: "right" },
                     { key: "gmv", label: "GMV", align: "right" },
                     { key: "profitLoss", label: "กำไร/ขาดทุน", align: "right" },
@@ -265,6 +319,8 @@ async function fetchShopeeApiPerformance(credentials: ShopeeCredentials | null):
                     id: campaign.id,
                     name: campaign.name,
                     adType: campaign.adType,
+                    startDate: campaign.startDate,
+                    endDate: campaign.endDate,
                     spend: `฿${campaign.spend.toLocaleString()}`,
                     gmv: `฿${campaign.gmv.toLocaleString()}`,
                     profitLoss: `${campaign.profitLoss >= 0 ? "+" : ""}฿${campaign.profitLoss.toLocaleString()}`,

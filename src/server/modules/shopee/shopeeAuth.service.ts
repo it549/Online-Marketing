@@ -48,17 +48,46 @@ export function assertShopeeCallsAllowed(): void {
     shopeeBlock = null;
 }
 
+// In-memory tally (resets on restart) so the success rate Shopee judges us on (>90% / 7d) is visible in server logs.
+const shopeeCallStats = { ok: 0, failed: 0 };
+
+export function getShopeeCallStats(): { ok: number; failed: number; successRate: number | null } {
+    const total = shopeeCallStats.ok + shopeeCallStats.failed;
+    return { ...shopeeCallStats, successRate: total ? shopeeCallStats.ok / total : null };
+}
+
+/** Logs this server's real outbound IP so it can be compared with the IPs declared in Shopee Open Platform. */
+async function logOutboundIp(): Promise<void> {
+    try {
+        const ip = (await (await fetch("https://api.ipify.org")).text()).trim();
+        console.warn(`[shopee] source_ip_undeclared: outbound IP of this server is ${ip} — declare it in Shopee Open Platform`);
+    } catch {
+        // Diagnostic only.
+    }
+}
+
+function recordShopeeCall(path: string, error: string | undefined): void {
+    if (error) shopeeCallStats.failed++;
+    else shopeeCallStats.ok++;
+    if (!error) return;
+    const { ok, failed, successRate } = getShopeeCallStats();
+    console.warn(`[shopee] ${path} failed: ${error} (ok=${ok}, failed=${failed}, rate=${((successRate ?? 0) * 100).toFixed(0)}%)`);
+    if (error === "source_ip_undeclared") void logOutboundIp();
+}
+
 /** Shopee sometimes answers with plain text (e.g. ERROR_SP_...) instead of JSON; surface it instead of a JSON parse crash. */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export async function parseShopeeJson(response: Response, path: string): Promise<ShopeeErrorBody & Record<string, any>> {
     const text = await response.text();
     try {
         const body = JSON.parse(text);
+        recordShopeeCall(path, body?.error || undefined);
         if (body?.error && SHOPEE_BLOCKING_ERRORS.has(body.error)) {
             blockShopeeCalls(body.message ? `${body.message} (${body.error})` : String(body.error));
         }
         return body;
     } catch {
+        recordShopeeCall(path, `non-JSON HTTP ${response.status}`);
         if (text.includes("ERROR_SP_SERVICE_NOT_FOUND")) {
             const message = `แอป Shopee นี้ไม่มีสิทธิ์ใช้ API นี้ (${path}) — ตรวจ App Category (ต้องเป็น Ads Service สำหรับ /ads) และว่าไม่ได้ใช้ host sandbox`;
             blockShopeeCalls(message);
