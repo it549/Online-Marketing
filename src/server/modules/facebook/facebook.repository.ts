@@ -7,7 +7,7 @@ export async function getFacebookCampaignRepository(params: GetCampaignsParams):
 
         url.searchParams.set(
             "fields",
-            `name,status,insights.date_preset(${params.datePreset}){spend,impressions,reach,clicks,ctr,actions,cost_per_action_type,action_values}`,
+            `name,status,start_time,stop_time,insights.date_preset(${params.datePreset}){spend,impressions,reach,clicks,ctr,actions,cost_per_action_type,action_values}`,
         );
 
         url.searchParams.set("access_token", params.accessToken);

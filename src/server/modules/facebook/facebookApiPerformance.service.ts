@@ -7,6 +7,11 @@ import { getCompanyById } from "@/server/modules/company/company.repository";
 
 const DATE_PRESET_LABEL = "ตลอดอายุแคมเปญ";
 
+/** Graph API returns ISO timestamps with the account's offset; the leading YYYY-MM-DD is the account-local date. */
+function formatCampaignDate(value?: string): string {
+    return value ? value.slice(0, 10) : "-";
+}
+
 export interface FacebookAdAccountCredentials {
     adAccountId: string;
     accessToken: string;
@@ -68,6 +73,8 @@ export async function getFacebookApiPerformance(credentials: FacebookAdAccountCr
                 id: campaign.id,
                 name: campaign.name,
                 status: campaign.status,
+                startDate: formatCampaignDate(campaign.start_time),
+                endDate: formatCampaignDate(campaign.stop_time),
                 spend,
                 impressions,
                 reach,
@@ -129,6 +136,8 @@ export async function getFacebookApiPerformance(credentials: FacebookAdAccountCr
                 columns: [
                     { key: "name", label: "Campaign" },
                     { key: "status", label: "Status", align: "center" },
+                    { key: "startDate", label: "เริ่ม", align: "center" },
+                    { key: "endDate", label: "หยุด", align: "center" },
                     { key: "spend", label: "Spend", align: "right" },
                     { key: "reach", label: "Reach", align: "right" },
                     { key: "ctr", label: "CTR", align: "right" },
@@ -142,6 +151,8 @@ export async function getFacebookApiPerformance(credentials: FacebookAdAccountCr
                     id: campaign.id,
                     name: campaign.name,
                     status: campaign.status,
+                    startDate: campaign.startDate,
+                    endDate: campaign.endDate,
                     spend: `฿${campaign.spend.toLocaleString()}`,
                     reach: campaign.reach.toLocaleString(),
                     ctr: `${campaign.ctr.toFixed(2)}%`,

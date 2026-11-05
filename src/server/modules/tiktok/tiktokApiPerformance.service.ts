@@ -2,8 +2,7 @@ import { ApiPerformanceResponse } from "@/types/apiPerformance";
 import { getCompanyById } from "@/server/modules/company/company.repository";
 import { TIKTOK_API_BASE_URL } from "./tiktokIntegration.service";
 
-const DATE_RANGE_LABEL = "30 วันล่าสุด";
-const DAY_MS = 24 * 60 * 60 * 1000;
+const DATE_RANGE_LABEL = "ตลอดอายุแคมเปญ";
 
 export interface TikTokAdsCredentials {
     advertiserId: string;
@@ -36,16 +35,13 @@ export async function getTikTokApiPerformance(credentials: TikTokAdsCredentials 
     }
 
     try {
-        const end = new Date();
-        const start = new Date(end.getTime() - 29 * DAY_MS);
         const url = new URL(`${TIKTOK_API_BASE_URL}/report/integrated/get/`);
         url.searchParams.set("advertiser_id", credentials.advertiserId);
         url.searchParams.set("report_type", "BASIC");
         url.searchParams.set("data_level", "AUCTION_CAMPAIGN");
         url.searchParams.set("dimensions", JSON.stringify(["campaign_id"]));
         url.searchParams.set("metrics", JSON.stringify(["campaign_name", "spend", "impressions", "clicks", "conversion"]));
-        url.searchParams.set("start_date", start.toISOString().slice(0, 10));
-        url.searchParams.set("end_date", end.toISOString().slice(0, 10));
+        url.searchParams.set("query_lifetime", "true");
         url.searchParams.set("page_size", "200");
 
         const response = await fetch(url.toString(), { headers: { "Access-Token": credentials.accessToken } });

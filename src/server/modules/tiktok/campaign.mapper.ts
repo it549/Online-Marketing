@@ -10,7 +10,7 @@ export function mapTikTokDashboard(raw: TikTokCampaignResponse): DashboardData {
                 id: "spend",
                 label: "ยอดใช้จ่าย",
                 value: `฿${raw.summary.spend.toLocaleString()}`,
-                subtitle: "30 วันล่าสุด",
+                subtitle: "ตลอดอายุแคมเปญ",
                 color: "text-cyan-600",
             },
 
@@ -18,7 +18,7 @@ export function mapTikTokDashboard(raw: TikTokCampaignResponse): DashboardData {
                 id: "lead",
                 label: "Leads",
                 value: raw.summary.leads.toString(),
-                subtitle: "30 วันล่าสุด",
+                subtitle: "ตลอดอายุแคมเปญ",
                 color: "text-green-600",
             },
 

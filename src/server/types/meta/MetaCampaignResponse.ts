@@ -10,6 +10,8 @@ export interface MetaCampaign {
     id: string;
     name: string;
     status: string;
+    start_time?: string;
+    stop_time?: string;
     insights?: MetaInsights;
 }
 
