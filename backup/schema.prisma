@@ -1,0 +1,187 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+model Platform {
+  id         BigInt      @id @default(autoincrement())
+  name       String
+  code       String      @unique
+  isActive   Boolean     @default(true) @map("is_active")
+  createdAt  DateTime    @default(now()) @map("created_at")
+  updatedAt  DateTime    @updatedAt @map("updated_at")
+  campaigns  Campaign[]
+  importJobs ImportJob[]
+
+  @@map("platforms")
+}
+
+model Campaign {
+  id                 BigInt                 @id @default(autoincrement())
+  platformId         BigInt                 @map("platform_id")
+  externalCampaignId String                 @map("external_campaign_id")
+  campaignName       String                 @map("campaign_name")
+  campaignStatus     String                 @map("campaign_status")
+  adType             String?                @map("ad_type")
+  productId          String?                @map("product_id")
+  bidStrategy        String?                @map("bid_strategy")
+  placement          String?
+  startDate          DateTime?              @map("start_date") @db.Date
+  endDate            DateTime?              @map("end_date") @db.Date
+  createdAt          DateTime               @default(now()) @map("created_at")
+  updatedAt          DateTime               @updatedAt @map("updated_at")
+  platform           Platform               @relation(fields: [platformId], references: [id])
+  reportMetrics      CampaignReportMetric[]
+
+  @@unique([platformId, externalCampaignId])
+  @@map("campaigns")
+}
+
+model ImportJob {
+  id              BigInt                 @id @default(autoincrement())
+  platformId      BigInt                 @map("platform_id")
+  filename        String
+  reportName      String                 @map("report_name")
+  reportStartDate DateTime               @map("report_start_date") @db.Date
+  reportEndDate   DateTime               @map("report_end_date") @db.Date
+  totalRecords    Int                    @map("total_records")
+  importedBy      BigInt?                @map("imported_by")
+  status          ImportStatus
+  errorMessage    String?                @map("error_message") @db.Text
+  importedAt      DateTime?              @map("imported_at")
+  createdAt       DateTime               @default(now()) @map("created_at")
+  updatedAt       DateTime               @updatedAt @map("updated_at")
+  platform        Platform               @relation(fields: [platformId], references: [id])
+  reportMetrics   CampaignReportMetric[]
+
+  @@map("import_jobs")
+}
+
+model CampaignReportMetric {
+  id                   BigInt    @id @default(autoincrement())
+  campaignId           BigInt    @map("campaign_id")
+  importJobId          BigInt    @map("import_job_id")
+  reportStartDate      DateTime  @map("report_start_date") @db.Date
+  reportEndDate        DateTime  @map("report_end_date") @db.Date
+  impressions          Int?
+  clicks               Int?
+  ctr                  Decimal?  @db.Decimal(8, 4)
+  addToCart            Int?      @map("add_to_cart")
+  addToCartRate        Decimal?  @map("add_to_cart_rate") @db.Decimal(8, 4)
+  orders               Int?
+  directOrders         Int?      @map("direct_orders")
+  conversionRate       Decimal?  @map("conversion_rate") @db.Decimal(8, 4)
+  directConversionRate Decimal?  @map("direct_conversion_rate") @db.Decimal(8, 4)
+  costPerOrder         Decimal?  @map("cost_per_order") @db.Decimal(10, 2)
+  directCostPerOrder   Decimal?  @map("direct_cost_per_order") @db.Decimal(10, 2)
+  unitsSold            Int?      @map("units_sold")
+  directUnitsSold      Int?      @map("direct_units_sold")
+  revenue              Decimal?  @db.Decimal(12, 2)
+  directRevenue        Decimal?  @db.Decimal(12, 2)
+  spend                Decimal?  @db.Decimal(12, 2)
+  roas                 Decimal?  @db.Decimal(8, 2)
+  directRoas           Decimal?  @db.Decimal(8, 2)
+  acos                 Decimal?  @db.Decimal(8, 2)
+  directAcos           Decimal?  @db.Decimal(8, 2)
+  productImpressions   Int?      @map("product_impressions")
+  productClicks        Int?      @map("product_clicks")
+  productCtr           Decimal?  @map("product_ctr") @db.Decimal(8, 4)
+  voucherAmount        Decimal?  @map("voucher_amount") @db.Decimal(12, 2)
+  voucherSales         Decimal?  @map("voucher_sales") @db.Decimal(12, 2)
+  createdAt            DateTime  @default(now()) @map("created_at")
+  updatedAt            DateTime  @updatedAt @map("updated_at")
+  campaign             Campaign  @relation(fields: [campaignId], references: [id])
+  importJob            ImportJob @relation(fields: [importJobId], references: [id])
+
+  @@map("campaign_report_metrics")
+}
+
+enum ImportStatus {
+  PENDING
+  PROCESSING
+  COMPLETED
+  FAILED
+}
+
+// --- Content (organic posts) domain ---------------------------------------
+// Separate from Platform/Campaign/CampaignReportMetric above, which model
+// periodic AD CAMPAIGN reports (spend/revenue per date range, additive across
+// imports). Content posts are CUMULATIVE LIFETIME snapshots per post -- every
+// export re-states each post's all-time totals, so re-importing must
+// overwrite (upsert) a post's single metric row, never sum across imports.
+
+model ContentPlatform {
+  id         BigInt             @id @default(autoincrement())
+  code       String             @unique // "FACEBOOK" (future: "TIKTOK", "INSTAGRAM")
+  name       String
+  isActive   Boolean            @default(true) @map("is_active")
+  createdAt  DateTime           @default(now()) @map("created_at")
+  updatedAt  DateTime           @updatedAt @map("updated_at")
+  posts      ContentPost[]
+  importJobs ContentImportJob[]
+
+  @@map("content_platforms")
+}
+
+model ContentImportJob {
+  id             BigInt          @id @default(autoincrement())
+  platformId     BigInt          @map("platform_id")
+  filename       String
+  rangeStartDate DateTime?       @map("range_start_date") @db.Date
+  rangeEndDate   DateTime?       @map("range_end_date") @db.Date
+  totalRecords   Int             @map("total_records")
+  status         ImportStatus
+  errorMessage   String?         @map("error_message") @db.Text
+  importedAt     DateTime?       @map("imported_at")
+  createdAt      DateTime        @default(now()) @map("created_at")
+  updatedAt      DateTime        @updatedAt @map("updated_at")
+  platform       ContentPlatform @relation(fields: [platformId], references: [id])
+  posts          ContentPost[]
+
+  @@map("content_import_jobs")
+}
+
+model ContentPost {
+  id              BigInt             @id @default(autoincrement())
+  platformId      BigInt             @map("platform_id")
+  externalPostId  String             @map("external_post_id")
+  pageExternalId  String?            @map("page_external_id")
+  pageName        String?            @map("page_name")
+  title           String?            @db.Text
+  postType        String?            @map("post_type")
+  permalink       String?            @db.Text
+  publishedAt     DateTime?          @map("published_at")
+  durationSeconds Int?               @map("duration_seconds")
+  lastImportJobId BigInt?            @map("last_import_job_id")
+  createdAt       DateTime           @default(now()) @map("created_at")
+  updatedAt       DateTime           @updatedAt @map("updated_at")
+  platform        ContentPlatform    @relation(fields: [platformId], references: [id])
+  lastImportJob   ContentImportJob?  @relation(fields: [lastImportJobId], references: [id])
+  metric          ContentPostMetric?
+
+  @@unique([platformId, externalPostId])
+  @@map("content_posts")
+}
+
+model ContentPostMetric {
+  id               BigInt      @id @default(autoincrement())
+  postId           BigInt      @unique @map("post_id")
+  avgSecondsViewed Decimal?    @map("avg_seconds_viewed") @db.Decimal(10, 3)
+  reach            Int?
+  impressions      Int?
+  reactions        Int?
+  comments         Int?
+  shares           Int?
+  saves            Int?
+  newFollowers     Int?        @map("new_followers")
+  viewers          Int?
+  views            Int?
+  updatedAt        DateTime    @updatedAt @map("updated_at")
+  post             ContentPost @relation(fields: [postId], references: [id])
+
+  @@map("content_post_metrics")
+}

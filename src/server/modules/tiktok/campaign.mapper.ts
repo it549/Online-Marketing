@@ -1,0 +1,84 @@
+import { DashboardData } from "@/types/dashboard";
+import { TikTokCampaignResponse } from "@/types/tiktok";
+
+export function mapTikTokDashboard(raw: TikTokCampaignResponse): DashboardData {
+    return {
+        platform: "tiktok",
+        title: "TikTok Ads",
+        metrics: [
+            {
+                id: "spend",
+                label: "ยอดใช้จ่าย",
+                value: `฿${raw.summary.spend.toLocaleString()}`,
+                subtitle: "ตลอดอายุแคมเปญ",
+                color: "text-cyan-600",
+            },
+
+            {
+                id: "lead",
+                label: "Leads",
+                value: raw.summary.leads.toString(),
+                subtitle: "ตลอดอายุแคมเปญ",
+                color: "text-green-600",
+            },
+
+            {
+                id: "cpl",
+                label: "Cost / Lead",
+                value: `฿${raw.summary.cpl}`,
+                subtitle: "Average",
+                color: "text-sky-600",
+            },
+
+            {
+                id: "ctr",
+                label: "CTR",
+                value: `${raw.summary.ctr}%`,
+                subtitle: "Click Through Rate",
+                color: "text-pink-600",
+            },
+        ],
+
+        table: {
+            columns: [
+                {
+                    key: "name",
+                    label: "Campaign",
+                },
+
+                {
+                    key: "spend",
+                    label: "Spend",
+                    align: "right",
+                },
+
+                {
+                    key: "leads",
+                    label: "Leads",
+                    align: "right",
+                },
+
+                {
+                    key: "cpl",
+                    label: "CPL",
+                    align: "right",
+                },
+
+                {
+                    key: "status",
+                    label: "Status",
+                    align: "center",
+                },
+            ],
+
+            rows: raw.campaigns.map((campaign) => ({
+                id: campaign.id,
+                name: campaign.name,
+                spend: `฿${campaign.spend.toLocaleString()}`,
+                leads: campaign.leads,
+                cpl: `฿${campaign.cpl}`,
+                status: campaign.status,
+            })),
+        },
+    };
+}

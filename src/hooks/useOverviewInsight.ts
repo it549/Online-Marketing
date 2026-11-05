@@ -1,0 +1,37 @@
+"use client";
+
+import { useCallback, useEffect, useState } from "react";
+import type { OverviewInsightResponse } from "@/types/overview";
+
+export function useOverviewInsight(dateFrom: string, dateTo: string) {
+    const [data, setData] = useState<OverviewInsightResponse | null>(null);
+    const [loading, setLoading] = useState(true);
+    const [error, setError] = useState<string | null>(null);
+
+    const fetchData = useCallback(async () => {
+        try {
+            setLoading(true);
+            const params = new URLSearchParams({ dateFrom, dateTo });
+            const response = await fetch(`/api/dashboard/overview/insight?${params.toString()}`);
+            const result = await response.json();
+
+            if (!response.ok) {
+                throw new Error(result.error ?? "ไม่สามารถโหลดข้อมูลสรุปได้");
+            }
+
+            setData(result);
+            setError(null);
+        } catch (err) {
+            setData(null);
+            setError(err instanceof Error ? err.message : "เกิดข้อผิดพลาด");
+        } finally {
+            setLoading(false);
+        }
+    }, [dateFrom, dateTo]);
+
+    useEffect(() => {
+        void Promise.resolve().then(fetchData);
+    }, [fetchData]);
+
+    return { data, loading, error, refetch: fetchData };
+}
