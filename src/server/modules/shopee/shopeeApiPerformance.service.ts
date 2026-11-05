@@ -35,9 +35,12 @@ export async function getShopeeApiPerformanceForCompany(companyId: bigint): Prom
 // therefore spans 31 full days and gets rejected with "date range too long". 28 days
 // keeps a safety margin regardless of which calendar month(s) the window falls in.
 const ADS_LOOKBACK_DAYS = 28;
-// Longer history is fetched by walking back window-by-window (see getShopeeAdsSummary), up to ~1 year.
-const ADS_MAX_WINDOWS = 13;
-const ADS_DATE_RANGE_LABEL = "ตั้งแต่เริ่มแคมเปญ";
+// Longer history is fetched by walking back window-by-window (see getShopeeAdsSummary). Shopee rejects any
+// date older than 6 months (ads.performance.error_date_too_old), so 7 windows (~196 days) always reach that limit.
+const ADS_MAX_WINDOWS = 7;
+// Days kept back from the exact 6-month mark so timezone/month-length differences never cross Shopee's limit.
+const ADS_MAX_AGE_MARGIN_DAYS = 2;
+const ADS_DATE_RANGE_LABEL = "ตั้งแต่เริ่มแคมเปญ (ย้อนหลังสูงสุด 6 เดือน)";
 
 // Shopee's Ads API only returns performance for product-level campaigns fetched in one call;
 // shops running more than this many campaigns will only see the first page in the table below
@@ -169,8 +172,12 @@ async function getShopeeAdsSummary(shopId: string, accessToken: string): Promise
     // after it) or the safety cap is hit -- every window is a separate API call.
     const dayMs = 24 * 60 * 60 * 1000;
     let windowEnd = new Date();
+    const oldestAllowed = new Date(windowEnd);
+    oldestAllowed.setUTCMonth(oldestAllowed.getUTCMonth() - 6);
+    oldestAllowed.setUTCDate(oldestAllowed.getUTCDate() + ADS_MAX_AGE_MARGIN_DAYS);
     for (let i = 0; i < ADS_MAX_WINDOWS; i++) {
-        const windowStart = new Date(windowEnd.getTime() - ADS_LOOKBACK_DAYS * dayMs);
+        if (windowEnd < oldestAllowed) break;
+        const windowStart = new Date(Math.max(windowEnd.getTime() - ADS_LOOKBACK_DAYS * dayMs, oldestAllowed.getTime()));
         const dateParams = { start_date: formatShopeeAdsDate(windowStart), end_date: formatShopeeAdsDate(windowEnd) };
 
         const shopLevel = await shopeeShopGet("/api/v2/ads/get_all_cpc_ads_daily_performance", shopId, accessToken, dateParams);
