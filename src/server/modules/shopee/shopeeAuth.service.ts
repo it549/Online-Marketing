@@ -34,16 +34,20 @@ export interface ShopeeTokenResult {
 // A stored token Shopee rejects (invalid_acceess_token is Shopee's own spelling) fails identically on every call until the shop is reconnected.
 const SHOPEE_BLOCKING_ERRORS = new Set(["error_api_permission", "source_ip_undeclared", "invalid_acceess_token", "invalid_access_token"]);
 const SHOPEE_BLOCK_COOLDOWN_MS = 60 * 60 * 1000;
+// Rate limiting clears within minutes, but calling again right away only adds more failed calls.
+const SHOPEE_RATE_LIMIT_ERROR = "error_rate_limit";
+const SHOPEE_RATE_LIMIT_COOLDOWN_MS = 2 * 60 * 1000;
 let shopeeBlock: { until: number; message: string } | null = null;
 
-function blockShopeeCalls(message: string): void {
-    shopeeBlock = { until: Date.now() + SHOPEE_BLOCK_COOLDOWN_MS, message };
+function blockShopeeCalls(message: string, cooldownMs = SHOPEE_BLOCK_COOLDOWN_MS): void {
+    shopeeBlock = { until: Date.now() + cooldownMs, message };
 }
 
-/** Throws without calling Shopee while a recent permission/IP rejection is still cooling down. */
+/** Throws without calling Shopee while a recent permission/IP/rate-limit rejection is still cooling down. */
 export function assertShopeeCallsAllowed(): void {
     if (shopeeBlock && Date.now() < shopeeBlock.until) {
-        throw new ShopeeApiError(`${shopeeBlock.message} — พักการเรียก Shopee ชั่วคราวเพื่อไม่ให้อัตราสำเร็จของ API ลดลง (ลองใหม่ภายใน 1 ชั่วโมง หรือกดเชื่อมต่อ Shopee ใหม่)`);
+        const minutesLeft = Math.ceil((shopeeBlock.until - Date.now()) / 60_000);
+        throw new ShopeeApiError(`${shopeeBlock.message} — พักการเรียก Shopee ชั่วคราวเพื่อไม่ให้อัตราสำเร็จของ API ลดลง (ลองใหม่ในอีก ${minutesLeft} นาที หรือกดเชื่อมต่อ Shopee ใหม่)`);
     }
     shopeeBlock = null;
 }
@@ -84,6 +88,8 @@ export async function parseShopeeJson(response: Response, path: string): Promise
         recordShopeeCall(path, body?.error || undefined);
         if (body?.error && SHOPEE_BLOCKING_ERRORS.has(body.error)) {
             blockShopeeCalls(body.message ? `${body.message} (${body.error})` : String(body.error));
+        } else if (body?.error === SHOPEE_RATE_LIMIT_ERROR) {
+            blockShopeeCalls(`Shopee จำกัดจำนวนการเรียก API ชั่วคราว (${body.error})`, SHOPEE_RATE_LIMIT_COOLDOWN_MS);
         }
         return body;
     } catch {
