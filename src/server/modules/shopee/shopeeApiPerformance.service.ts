@@ -56,6 +56,12 @@ export interface ShopeeApiEnvelope {
     warning?: string;
 }
 
+/** Shopee returns `response` as either a list of per-shop blocks or a single block object; always hand back a list. */
+export function shopeeResponseList<T>(response: unknown): T[] {
+    if (Array.isArray(response)) return response as T[];
+    return response && typeof response === "object" ? [response as T] : [];
+}
+
 export async function shopeeShopGet(path: string, shopId: string, accessToken: string, params: Record<string, string> = {}): Promise<ShopeeApiEnvelope> {
     assertShopeeCallsAllowed();
     const timestamp = shopeeTimestamp();
@@ -181,8 +187,7 @@ async function getShopeeAdsSummary(shopId: string, accessToken: string): Promise
                 ...dateParams,
                 campaign_id_list: campaignIds,
             });
-            const shopBlocks =
-                (campaignPerformance.response as unknown as { campaign_list?: ShopeeCampaignPerformance[] }[] | undefined) ?? [];
+            const shopBlocks = shopeeResponseList<{ campaign_list?: ShopeeCampaignPerformance[] }>(campaignPerformance.response);
 
             for (const campaign of shopBlocks.flatMap((block) => block.campaign_list ?? [])) {
                 const spend = campaign.metrics_list.reduce((sum, point) => sum + (point.expense ?? 0), 0);

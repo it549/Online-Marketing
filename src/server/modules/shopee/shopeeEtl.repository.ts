@@ -1,4 +1,4 @@
-import { shopeeShopGet, type ShopeeApiEnvelope } from "./shopeeApiPerformance.service";
+import { shopeeResponseList, shopeeShopGet, type ShopeeApiEnvelope } from "./shopeeApiPerformance.service";
 
 const MAX_CAMPAIGNS_PER_REQUEST = 100;
 
@@ -52,7 +52,6 @@ export async function getShopeeCampaignPerformanceForDate(
         { ...dateParams, campaign_id_list: campaignEntries.map((entry) => entry.campaign_id).join(",") },
     );
 
-    const shopBlocks =
-        (campaignPerformance.response as unknown as { campaign_list?: ShopeeCampaignPerformance[] }[] | undefined) ?? [];
+    const shopBlocks = shopeeResponseList<{ campaign_list?: ShopeeCampaignPerformance[] }>(campaignPerformance.response);
     return shopBlocks.flatMap((block) => block.campaign_list ?? []);
 }
