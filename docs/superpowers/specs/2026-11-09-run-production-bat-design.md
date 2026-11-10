@@ -17,9 +17,16 @@ before exiting with a non-zero status so the error remains visible. When the
 server starts, it remains in the foreground in the same Command Prompt window;
 the user can stop it with Ctrl+C.
 
+Before starting the server, after a successful build, check whether any process
+is listening on local port 3002. If so, terminate that process tree before
+starting the app. This applies to any listener on that port, not only an
+instance of this app. If the process cannot be terminated, report the error and
+stop instead of continuing to start the server.
+
 ## Scope and validation
 
 No application code, package scripts, dependencies, or runtime configuration
-will change. Validate the batch file's command flow and inspect the final diff.
-Running the production build is environment-dependent and is not required for
-this launcher-only change.
+will change. Validate the batch file's command flow, including no listener,
+listener terminated, and termination failure cases, then inspect the final
+diff. Running the production build is environment-dependent and is not
+required for this launcher-only change.
