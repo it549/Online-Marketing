@@ -100,7 +100,7 @@ function formatShopeeAdsDate(date: Date): string {
 interface ShopeeCampaignSetting {
     campaign_id: number;
     // campaign_status: ongoing | scheduled | paused | ended | closed | deleted
-    common_info?: { campaign_status?: string; campaign_duration?: { start_time?: number; end_time?: number } };
+    common_info?: { campaign_status?: string; campaign_duration?: { start_time?: number; end_time?: number }; item_id_list?: number[] };
 }
 
 /** Shopee uses unix seconds, with 0 / missing meaning "no date" (e.g. an open-ended campaign). */
@@ -152,6 +152,8 @@ interface ShopeeAdsSummary {
         endDate: string;
         /** Shopee campaign_status; null when the setting-info call failed. */
         status: string | null;
+        /** Products this ad promotes (from setting info); empty when unknown. */
+        itemIds: number[];
     }[];
 }
 
@@ -221,6 +223,7 @@ async function getShopeeAdsSummary(shopId: string, accessToken: string): Promise
                     startDate: "-",
                     endDate: "-",
                     status: null,
+                    itemIds: previous?.itemIds ?? [],
                 });
             }
         }
@@ -241,6 +244,7 @@ async function getShopeeAdsSummary(shopId: string, accessToken: string): Promise
                 const campaign = campaignMap.get(setting.campaign_id);
                 if (!campaign) continue;
                 campaign.status = setting.common_info?.campaign_status ?? null;
+                campaign.itemIds = setting.common_info?.item_id_list ?? [];
                 const duration = setting.common_info?.campaign_duration;
                 if (!duration) continue;
                 campaign.startDate = formatShopeeUnixDate(duration.start_time);
@@ -263,14 +267,21 @@ const ORDER_DETAIL_BATCH = 50;
 interface ShopeeOrderDetail {
     order_sn: string;
     order_status?: string;
-    item_list?: { model_discounted_price?: number; model_quantity_purchased?: number }[];
+    item_list?: { item_id?: number; model_discounted_price?: number; model_quantity_purchased?: number }[];
+}
+
+interface ShopeeCompletedSales {
+    sales: number;
+    orders: number;
+    /** Completed sales per product: amount, and number of orders containing it. */
+    byItem: Map<number, { sales: number; orders: number }>;
 }
 
 /**
  * Real sales only: shop-wide orders created in [since, now] whose status is COMPLETED (buyer received, not
  * cancelled/unpaid/returned). Amount is item price after discount x quantity, excluding shipping -- the same basis as ads GMV.
  */
-async function getShopeeCompletedSales(shopId: string, accessToken: string, since: Date): Promise<{ sales: number; orders: number }> {
+async function getShopeeCompletedSales(shopId: string, accessToken: string, since: Date): Promise<ShopeeCompletedSales> {
     const orderSns: string[] = [];
     const nowSec = Math.floor(Date.now() / 1000);
     for (let from = Math.floor(since.getTime() / 1000); from < nowSec; from += ORDER_WINDOW_DAYS * 86400) {
@@ -294,6 +305,7 @@ async function getShopeeCompletedSales(shopId: string, accessToken: string, sinc
 
     let sales = 0;
     let orders = 0;
+    const byItem = new Map<number, { sales: number; orders: number }>();
     for (let i = 0; i < orderSns.length; i += ORDER_DETAIL_BATCH) {
         const detail = await shopeeShopGet("/api/v2/order/get_order_detail", shopId, accessToken, {
             order_sn_list: orderSns.slice(i, i + ORDER_DETAIL_BATCH).join(","),
@@ -303,13 +315,21 @@ async function getShopeeCompletedSales(shopId: string, accessToken: string, sinc
         for (const order of list) {
             if (order.order_status !== "COMPLETED") continue;
             orders += 1;
-            sales += (order.item_list ?? []).reduce(
-                (sum, item) => sum + (item.model_discounted_price ?? 0) * (item.model_quantity_purchased ?? 0),
-                0,
-            );
+            const counted = new Set<number>();
+            for (const item of order.item_list ?? []) {
+                const amount = (item.model_discounted_price ?? 0) * (item.model_quantity_purchased ?? 0);
+                sales += amount;
+                if (item.item_id === undefined) continue;
+                const entry = byItem.get(item.item_id) ?? { sales: 0, orders: 0 };
+                entry.sales += amount;
+                // One order can hold several models of the same product -- count the order once.
+                if (!counted.has(item.item_id)) entry.orders += 1;
+                counted.add(item.item_id);
+                byItem.set(item.item_id, entry);
+            }
         }
     }
-    return { sales, orders };
+    return { sales, orders, byItem };
 }
 
 // Overview and the Shopee page both load this on every visit; Shopee ads data only moves a few times a day,
@@ -360,7 +380,7 @@ async function fetchShopeeApiPerformance(credentials: ShopeeCredentials | null):
 
         // Sales = completed orders only (ads GMV also counts cancelled/unpaid/not-yet-received orders).
         // An Order API failure (e.g. app lacks order permission) must not hide the ads numbers, and must not fall back to ads GMV.
-        let completed: { sales: number; orders: number } | null = null;
+        let completed: ShopeeCompletedSales | null = null;
         let completedError: string | null = null;
         try {
             completed = await getShopeeCompletedSales(credentials.shopId, accessToken, ads.since);
@@ -382,6 +402,19 @@ async function fetchShopeeApiPerformance(credentials: ShopeeCredentials | null):
         const spendSubtitle = statusKnown
             ? `เฉพาะ ${sortedCampaigns.length} โฆษณาที่เปิดอยู่ ${ADS_DATE_RANGE_LABEL}`
             : `ทุกโฆษณา (ดึงสถานะแคมเปญไม่สำเร็จ) ${ADS_DATE_RANGE_LABEL}`;
+
+        // Per row: completed sales of the product(s) the ad promotes (all completed orders of that product, ads or not --
+        // Shopee doesn't say which completed order came from an ad). null when the products or orders are unknown.
+        const rowSales = (campaign: (typeof sortedCampaigns)[number]) => {
+            if (!completed || campaign.itemIds.length === 0) return null;
+            return campaign.itemIds.reduce(
+                (total, itemId) => {
+                    const item = completed.byItem.get(itemId);
+                    return { sales: total.sales + (item?.sales ?? 0), orders: total.orders + (item?.orders ?? 0) };
+                },
+                { sales: 0, orders: 0 },
+            );
+        };
 
         const profitLoss = completed ? completed.sales - spend : null;
         const roas = completed && spend > 0 ? completed.sales / spend : null;
@@ -428,24 +461,27 @@ async function fetchShopeeApiPerformance(credentials: ShopeeCredentials | null):
                     { key: "startDate", label: "เริ่ม", align: "center" },
                     { key: "endDate", label: "หยุด", align: "center" },
                     { key: "spend", label: "ยอดใช้จ่าย", align: "right" },
-                    // Shopee can't attribute completed orders to a campaign, so per-campaign figures stay ads-reported GMV.
-                    { key: "gmv", label: "GMV โฆษณา (รวมยังไม่สำเร็จ)", align: "right" },
+                    { key: "sales", label: "ยอดขายจริง (ออเดอร์สำเร็จ)", align: "right" },
                     { key: "profitLoss", label: "กำไร/ขาดทุน", align: "right" },
                     { key: "roas", label: "ROAS", align: "right" },
-                    { key: "orders", label: "ออเดอร์", align: "right" },
+                    { key: "orders", label: "ออเดอร์สำเร็จ", align: "right" },
                 ],
-                rows: sortedCampaigns.slice(0, 50).map((campaign) => ({
-                    id: campaign.id,
-                    name: campaign.name,
-                    adType: campaign.adType,
-                    startDate: campaign.startDate,
-                    endDate: campaign.endDate,
-                    spend: `฿${campaign.spend.toLocaleString()}`,
-                    gmv: `฿${campaign.gmv.toLocaleString()}`,
-                    profitLoss: `${campaign.profitLoss >= 0 ? "+" : ""}฿${campaign.profitLoss.toLocaleString()}`,
-                    roas: campaign.roas !== null ? campaign.roas.toFixed(2) : "-",
-                    orders: campaign.orders,
-                })),
+                rows: sortedCampaigns.slice(0, 50).map((campaign) => {
+                    const real = rowSales(campaign);
+                    const rowProfit = real ? real.sales - campaign.spend : null;
+                    return {
+                        id: campaign.id,
+                        name: campaign.name,
+                        adType: campaign.adType,
+                        startDate: campaign.startDate,
+                        endDate: campaign.endDate,
+                        spend: `฿${campaign.spend.toLocaleString()}`,
+                        sales: real ? `฿${real.sales.toLocaleString()}` : "-",
+                        profitLoss: rowProfit === null ? "-" : `${rowProfit >= 0 ? "+" : ""}฿${rowProfit.toLocaleString()}`,
+                        roas: real && campaign.spend > 0 ? (real.sales / campaign.spend).toFixed(2) : "-",
+                        orders: real ? real.orders : "-",
+                    };
+                }),
             },
         };
     } catch (error) {
