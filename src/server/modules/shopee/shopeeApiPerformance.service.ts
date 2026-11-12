@@ -78,7 +78,7 @@ export function shopeeResponseList<T>(response: unknown): T[] {
 
 /** An array value is sent as a repeated query parameter (e.g. item_status=NORMAL&item_status=UNLIST). */
 export async function shopeeShopGet(path: string, shopId: string, accessToken: string, params: Record<string, string | string[]> = {}): Promise<ShopeeApiEnvelope> {
-    assertShopeeCallsAllowed();
+    assertShopeeCallsAllowed(path);
     const timestamp = shopeeTimestamp();
     const sign = signShopeeRequest(path, timestamp, { accessToken, shopId });
 
