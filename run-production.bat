@@ -3,6 +3,10 @@ title Online-Marketing-Platform Production Server
 setlocal
 cd /d "%~dp0"
 
+echo Stopping anything on port 3002...
+powershell -NoProfile -Command "Get-NetTCPConnection -LocalPort 3002 -ErrorAction SilentlyContinue | Select-Object -ExpandProperty OwningProcess -Unique | Where-Object { $_ -gt 4 } | ForEach-Object { taskkill.exe /PID $_ /T /F }"
+
+echo.
 echo Building the production app...
 call npm run build
 if errorlevel 1 (
