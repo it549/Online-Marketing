@@ -34,22 +34,38 @@ export interface ShopeeTokenResult {
 // A stored token Shopee rejects (invalid_acceess_token is Shopee's own spelling) fails identically on every call until the shop is reconnected.
 const SHOPEE_BLOCKING_ERRORS = new Set(["error_api_permission", "source_ip_undeclared", "invalid_acceess_token", "invalid_access_token"]);
 const SHOPEE_BLOCK_COOLDOWN_MS = 60 * 60 * 1000;
+// Permission is granted per API module by app category (an Ads Service app may call /ads but not /order, /product,
+// /payment), so a permission rejection pauses only that module -- and for longer, since it won't change until the
+// app category/permissions change and the shop is reconnected (which clears every block).
+const SHOPEE_MODULE_PERMISSION_ERRORS = new Set(["error_api_permission"]);
+const SHOPEE_MODULE_BLOCK_COOLDOWN_MS = 24 * 60 * 60 * 1000;
 // Rate limiting clears within minutes, but calling again right away only adds more failed calls.
 const SHOPEE_RATE_LIMIT_ERROR = "error_rate_limit";
 const SHOPEE_RATE_LIMIT_COOLDOWN_MS = 2 * 60 * 1000;
-let shopeeBlock: { until: number; message: string } | null = null;
+const GLOBAL_SCOPE = "*";
+const shopeeBlocks = new Map<string, { until: number; message: string }>();
 
-function blockShopeeCalls(message: string, cooldownMs = SHOPEE_BLOCK_COOLDOWN_MS): void {
-    shopeeBlock = { until: Date.now() + cooldownMs, message };
+/** "/api/v2/order/get_order_list" -> "order" */
+function shopeeModule(path: string): string {
+    return path.split("/")[3] || GLOBAL_SCOPE;
 }
 
-/** Throws without calling Shopee while a recent permission/IP/rate-limit rejection is still cooling down. */
-export function assertShopeeCallsAllowed(): void {
-    if (shopeeBlock && Date.now() < shopeeBlock.until) {
-        const minutesLeft = Math.ceil((shopeeBlock.until - Date.now()) / 60_000);
-        throw new ShopeeApiError(`${shopeeBlock.message} — พักการเรียก Shopee ชั่วคราวเพื่อไม่ให้อัตราสำเร็จของ API ลดลง (ลองใหม่ในอีก ${minutesLeft} นาที หรือกดเชื่อมต่อ Shopee ใหม่)`);
+function blockShopeeCalls(message: string, cooldownMs = SHOPEE_BLOCK_COOLDOWN_MS, scope = GLOBAL_SCOPE): void {
+    shopeeBlocks.set(scope, { until: Date.now() + cooldownMs, message });
+}
+
+/** Throws without calling Shopee while a recent permission/IP/rate-limit rejection (for every call, or this path's module) is still cooling down. */
+export function assertShopeeCallsAllowed(path?: string): void {
+    for (const scope of path ? [GLOBAL_SCOPE, shopeeModule(path)] : [GLOBAL_SCOPE]) {
+        const block = shopeeBlocks.get(scope);
+        if (!block) continue;
+        if (Date.now() >= block.until) {
+            shopeeBlocks.delete(scope);
+            continue;
+        }
+        const minutesLeft = Math.ceil((block.until - Date.now()) / 60_000);
+        throw new ShopeeApiError(`${block.message} — พักการเรียก Shopee ส่วนนี้ชั่วคราวเพื่อไม่ให้อัตราสำเร็จของ API ลดลง (ลองใหม่ในอีก ${minutesLeft} นาที หรือกดเชื่อมต่อ Shopee ใหม่)`);
     }
-    shopeeBlock = null;
 }
 
 // In-memory tally (resets on restart) so the success rate Shopee judges us on (>90% / 7d) is visible in server logs.
@@ -86,7 +102,14 @@ export async function parseShopeeJson(response: Response, path: string): Promise
     try {
         const body = JSON.parse(text);
         recordShopeeCall(path, body?.error || undefined);
-        if (body?.error && SHOPEE_BLOCKING_ERRORS.has(body.error)) {
+        if (body?.error && SHOPEE_MODULE_PERMISSION_ERRORS.has(body.error)) {
+            const apiModule = shopeeModule(path);
+            blockShopeeCalls(
+                `แอป Shopee นี้ไม่มีสิทธิ์ใช้ API กลุ่ม ${apiModule} (${body.error}) — ต้องเปิดสิทธิ์/ใช้ App Category ที่รองรับใน Shopee Open Platform`,
+                SHOPEE_MODULE_BLOCK_COOLDOWN_MS,
+                apiModule,
+            );
+        } else if (body?.error && SHOPEE_BLOCKING_ERRORS.has(body.error)) {
             blockShopeeCalls(body.message ? `${body.message} (${body.error})` : String(body.error));
         } else if (body?.error === SHOPEE_RATE_LIMIT_ERROR) {
             blockShopeeCalls(`Shopee จำกัดจำนวนการเรียก API ชั่วคราว (${body.error})`, SHOPEE_RATE_LIMIT_COOLDOWN_MS);
@@ -96,7 +119,7 @@ export async function parseShopeeJson(response: Response, path: string): Promise
         recordShopeeCall(path, `non-JSON HTTP ${response.status}`);
         if (text.includes("ERROR_SP_SERVICE_NOT_FOUND")) {
             const message = `แอป Shopee นี้ไม่มีสิทธิ์ใช้ API นี้ (${path}) — ตรวจ App Category (ต้องเป็น Ads Service สำหรับ /ads) และว่าไม่ได้ใช้ host sandbox`;
-            blockShopeeCalls(message);
+            blockShopeeCalls(message, SHOPEE_MODULE_BLOCK_COOLDOWN_MS, shopeeModule(path));
             throw new ShopeeApiError(message);
         }
         throw new ShopeeApiError(`Shopee ตอบกลับไม่ใช่ JSON (HTTP ${response.status}, ${path}): ${text.slice(0, 200)}`);
@@ -138,7 +161,7 @@ export async function getShopeeAuthorizationUrlForCompany(companyId: bigint): Pr
 export async function connectShopeeAccount(companyId: bigint, code: string, shopId: string): Promise<void> {
     await saveShopeeCredentials(companyId, await exchangeShopeeCode(code, shopId));
     // A fresh token supersedes whatever rejection started the cooldown; otherwise the very next status check is blocked for up to 1h.
-    shopeeBlock = null;
+    shopeeBlocks.clear();
 }
 
 export function disconnectShopeeAccount(companyId: bigint): Promise<unknown> {
@@ -183,7 +206,7 @@ export async function exchangeShopeeCode(code: string, shopId: string): Promise<
     }
 
     // A fresh, successful authorization proves the app is allowed again.
-    shopeeBlock = null;
+    shopeeBlocks.clear();
 
     return {
         shopId: String(body.shop_id ?? shopId),
