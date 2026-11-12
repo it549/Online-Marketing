@@ -86,8 +86,10 @@ export async function getOverview(companyId: bigint): Promise<OverviewResponse> 
 
     const shopeeLive = shopee?.connected ?? false;
     const shopeeSpend = shopeeLive ? shopee?.summary?.spend ?? 0 : synced.shopee.spend;
-    const shopeeRevenue = shopeeLive ? shopee?.summary?.revenue ?? null : synced.shopee.hasData ? synced.shopee.conversionsValue : null;
-    const shopeeRoas = shopeeLive ? shopee?.summary?.roas ?? null : synced.shopee.roas;
+    // Shopee sales = completed orders only, which only the live call has. Synced ad_insights hold ads GMV (includes
+    // cancelled/unpaid orders), so no fallback for revenue/ROAS -- show "-" instead of an inflated number.
+    const shopeeRevenue = shopeeLive ? shopee?.summary?.revenue ?? null : null;
+    const shopeeRoas = shopeeLive ? shopee?.summary?.roas ?? null : null;
 
     const tiktokLive = tiktok?.connected ?? false;
     const tiktokSpend = tiktokLive ? tiktok?.summary?.spend ?? 0 : synced.tiktok.spend;
@@ -179,7 +181,7 @@ export async function getOverview(companyId: bigint): Promise<OverviewResponse> 
         generatedAt: new Date().toISOString(),
         totals: {
             spend: totalSpend,
-            shopeeRevenue: shopeeRevenue ?? 0,
+            shopeeRevenue,
             leads: totalLeads,
             avgRoas,
             avgCpl,

@@ -41,9 +41,9 @@ function buildMetrics(totals: OverviewTotals, platforms: OverviewPlatformSummary
     if (hasShopee) {
         metrics.push({
             id: "revenue",
-            label: "ยอดขายจากโฆษณา (Shopee)",
-            value: `฿${totals.shopeeRevenue.toLocaleString()}`,
-            subtitle: "จาก Shopee Ads API",
+            label: "ยอดขายจริง (Shopee)",
+            value: totals.shopeeRevenue !== null ? `฿${totals.shopeeRevenue.toLocaleString()}` : "-",
+            subtitle: "เฉพาะออเดอร์ที่สำเร็จแล้ว (ไม่รวมยกเลิก)",
             color: "text-emerald-600",
         });
     }

@@ -414,7 +414,7 @@ async function fetchShopeeApiPerformance(credentials: ShopeeCredentials | null):
             lastSyncedAt: new Date().toISOString(),
             dateRangeLabel: ADS_DATE_RANGE_LABEL,
             metrics,
-            summary: { spend, leads: completed?.orders ?? 0, roas, revenue: completed?.sales ?? 0 },
+            summary: { spend, leads: completed?.orders ?? 0, roas, revenue: completed?.sales },
             campaigns: sortedCampaigns.map((campaign) => ({
                 id: campaign.id,
                 name: campaign.name,
