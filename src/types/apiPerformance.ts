@@ -17,6 +17,10 @@ export interface ApiPerformanceResponse {
     error?: string;
     metrics: DashboardMetric[];
     table: DashboardTable;
+    /** Every ad regardless of status (the main table may show running ads only). Shopee only for now. */
+    allAdsTable?: DashboardTable;
+    /** Per completed order: sales, Shopee fees and payout (Payment API escrow). Shopee only. */
+    paymentsTable?: DashboardTable;
     /** Raw totals for cross-platform aggregation (Overview page). Only present when connected. */
     summary?: {
         spend: number;
