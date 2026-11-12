@@ -275,6 +275,7 @@ interface ShopeeCompletedSales {
     orders: number;
     /** Completed sales per product: amount, and number of orders containing it. */
     byItem: Map<number, { sales: number; orders: number }>;
+    orderSns: string[];
 }
 
 /**
@@ -306,6 +307,7 @@ async function getShopeeCompletedSales(shopId: string, accessToken: string, sinc
     let sales = 0;
     let orders = 0;
     const byItem = new Map<number, { sales: number; orders: number }>();
+    const completedSns: string[] = [];
     for (let i = 0; i < orderSns.length; i += ORDER_DETAIL_BATCH) {
         const detail = await shopeeShopGet("/api/v2/order/get_order_detail", shopId, accessToken, {
             order_sn_list: orderSns.slice(i, i + ORDER_DETAIL_BATCH).join(","),
@@ -315,6 +317,7 @@ async function getShopeeCompletedSales(shopId: string, accessToken: string, sinc
         for (const order of list) {
             if (order.order_status !== "COMPLETED") continue;
             orders += 1;
+            completedSns.push(order.order_sn);
             const counted = new Set<number>();
             for (const item of order.item_list ?? []) {
                 const amount = (item.model_discounted_price ?? 0) * (item.model_quantity_purchased ?? 0);
@@ -329,7 +332,54 @@ async function getShopeeCompletedSales(shopId: string, accessToken: string, sinc
             }
         }
     }
-    return { sales, orders, byItem };
+    return { sales, orders, byItem, orderSns: completedSns };
+}
+
+interface ShopeeOrderIncome {
+    /** What Shopee releases to the seller after every fee, voucher and shipping adjustment. */
+    escrow_amount?: number;
+    commission_fee?: number;
+    service_fee?: number;
+    seller_transaction_fee?: number;
+}
+
+// A COMPLETED order's escrow no longer changes, so keep it for the process lifetime: each order costs one
+// get_escrow_detail call (one order per call) only the first time it is seen.
+const escrowCache = new Map<string, { payout: number; fees: number }>();
+const ESCROW_CONCURRENCY = 10;
+
+/** Money actually received for these orders (escrow), and Shopee's fees taken from them. */
+async function getShopeePayout(
+    shopId: string,
+    accessToken: string,
+    orderSns: string[],
+): Promise<{ payout: number; fees: number; counted: number }> {
+    const missing = orderSns.filter((sn) => !escrowCache.has(`${shopId}:${sn}`));
+    for (let i = 0; i < missing.length; i += ESCROW_CONCURRENCY) {
+        await Promise.all(
+            missing.slice(i, i + ESCROW_CONCURRENCY).map(async (sn) => {
+                const detail = await shopeeShopGet("/api/v2/payment/get_escrow_detail", shopId, accessToken, { order_sn: sn });
+                const income = (detail.response as { order_income?: ShopeeOrderIncome } | undefined)?.order_income;
+                if (!income) return; // not counted; retried next time
+                escrowCache.set(`${shopId}:${sn}`, {
+                    payout: income.escrow_amount ?? 0,
+                    fees: (income.commission_fee ?? 0) + (income.service_fee ?? 0) + (income.seller_transaction_fee ?? 0),
+                });
+            }),
+        );
+    }
+
+    let payout = 0;
+    let fees = 0;
+    let counted = 0;
+    for (const sn of orderSns) {
+        const entry = escrowCache.get(`${shopId}:${sn}`);
+        if (!entry) continue;
+        payout += entry.payout;
+        fees += entry.fees;
+        counted += 1;
+    }
+    return { payout, fees, counted };
 }
 
 // Overview and the Shopee page both load this on every visit; Shopee ads data only moves a few times a day,
@@ -390,6 +440,21 @@ async function fetchShopeeApiPerformance(credentials: ShopeeCredentials | null):
             completedError = error instanceof Error ? error.message : "ดึงออเดอร์จาก Shopee ไม่สำเร็จ";
         }
 
+        // Real profit = money Shopee actually pays out (after commission/service/transaction fees, vouchers, shipping) − ad spend.
+        // A Payment API failure (e.g. no payment permission) falls back to sales − spend, labelled as such.
+        let payout: { payout: number; fees: number; counted: number } | null = null;
+        let payoutError: string | null = null;
+        if (completed) {
+            try {
+                payout = await getShopeePayout(credentials.shopId, accessToken, completed.orderSns);
+            } catch (error) {
+                if (error instanceof ShopeeInvalidTokenError) throw error;
+                console.warn("Shopee escrow detail failed:", error);
+                payoutError = error instanceof Error ? error.message : "ดึงข้อมูลเงินที่ได้รับจาก Shopee ไม่สำเร็จ";
+            }
+        }
+        const payoutComplete = payout !== null && completed !== null && payout.counted === completed.orders;
+
         // Only running ads count. If no status came back (setting-info call failed), use every campaign / the shop-wide total
         // rather than showing zero.
         const statusKnown = ads.campaigns.some((campaign) => campaign.status !== null);
@@ -416,7 +481,7 @@ async function fetchShopeeApiPerformance(credentials: ShopeeCredentials | null):
             );
         };
 
-        const profitLoss = completed ? completed.sales - spend : null;
+        const profitLoss = payoutComplete ? payout!.payout - spend : completed ? completed.sales - spend : null;
         const roas = completed && spend > 0 ? completed.sales / spend : null;
 
         const metrics = [
@@ -431,10 +496,24 @@ async function fetchShopeeApiPerformance(credentials: ShopeeCredentials | null):
                 color: "text-sky-600",
             },
             {
+                id: "shopee_payout",
+                label: "เงินที่ได้รับจริง (หลังหักค่าธรรมเนียม)",
+                value: payout ? `฿${payout.payout.toLocaleString()}` : "-",
+                subtitle: payout
+                    ? `ค่าธรรมเนียม/คอมมิชชั่น Shopee ฿${payout.fees.toLocaleString()}` +
+                      (payoutComplete ? "" : ` · ได้ข้อมูล ${payout.counted.toLocaleString()}/${completed!.orders.toLocaleString()} ออเดอร์`)
+                    : payoutError
+                      ? `ดึงข้อมูลเงินที่ได้รับไม่สำเร็จ: ${payoutError}`
+                      : "ต้องมีข้อมูลออเดอร์สำเร็จก่อน",
+                color: "text-teal-600",
+            },
+            {
                 id: "ads_profit_loss",
-                label: profitLoss === null || profitLoss >= 0 ? "กำไร" : "ขาดทุน",
+                label: (profitLoss === null || profitLoss >= 0 ? "กำไร" : "ขาดทุน") + (payoutComplete ? "จริง" : ""),
                 value: profitLoss === null ? "-" : `${profitLoss >= 0 ? "+" : ""}฿${profitLoss.toLocaleString()}`,
-                subtitle: "ยอดขายจริง − ยอดใช้จ่ายโฆษณา (ยังไม่รวมต้นทุนสินค้า)",
+                subtitle: payoutComplete
+                    ? "เงินที่ได้รับจริง − ยอดใช้จ่ายโฆษณา (ยังไม่รวมต้นทุนสินค้า)"
+                    : "ยอดขายจริง − ยอดใช้จ่ายโฆษณา (ยังไม่หักค่าธรรมเนียม Shopee และต้นทุนสินค้า)",
                 color: profitLoss === null || profitLoss >= 0 ? "text-emerald-600" : "text-rose-600",
             },
             { id: "ads_roas", label: "ROAS", value: roas !== null ? roas.toFixed(2) : "-", subtitle: "ยอดขายจริง / ยอดใช้จ่ายโฆษณา", color: "text-purple-600" },
