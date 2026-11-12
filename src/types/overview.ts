@@ -26,7 +26,8 @@ export interface OverviewCampaignRow {
 
 export interface OverviewTotals {
     spend: number;
-    shopeeRevenue: number;
+    /** Completed-order sales; null when the live Shopee call has none. */
+    shopeeRevenue: number | null;
     leads: number;
     avgRoas: number | null;
     avgCpl: number | null;
