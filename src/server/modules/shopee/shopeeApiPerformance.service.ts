@@ -377,6 +377,8 @@ async function fetchShopeeApiPerformance(credentials: ShopeeCredentials | null):
         const statusKnown = ads.campaigns.some((campaign) => campaign.status !== null);
         const sortedCampaigns = ads.campaigns
             .filter((campaign) => !statusKnown || campaign.status === "ongoing")
+            // A product ad with no spend, GMV or orders in the range is noise.
+            .filter((campaign) => campaign.spend !== 0 || campaign.gmv !== 0 || campaign.orders !== 0)
             .sort((a, b) => b.spend - a.spend);
         const spend = statusKnown ? sortedCampaigns.reduce((sum, campaign) => sum + campaign.spend, 0) : ads.totalSpend;
         const spendSubtitle = statusKnown
