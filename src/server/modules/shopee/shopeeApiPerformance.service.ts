@@ -1,5 +1,6 @@
 import { config } from "@/server/configurations/config";
 import { ApiPerformanceResponse } from "@/types/apiPerformance";
+import { TableColumn } from "@/types/table";
 import {
     ShopeeApiError,
     ShopeeInvalidTokenError,
@@ -15,19 +16,21 @@ import { getCompanyById } from "@/server/modules/company/company.repository";
 
 export type { ShopeeCredentials } from "./shopeeAuth.service";
 
-export async function getShopeeApiPerformanceForCompany(companyId: bigint): Promise<ApiPerformanceResponse> {
+export async function getShopeeCredentialsForCompany(companyId: bigint): Promise<ShopeeCredentials | null> {
     const company = await getCompanyById(companyId);
-    const credentials: ShopeeCredentials | null =
-        company?.shopeeShopId && company.shopeeAccessToken && company.shopeeRefreshToken
-            ? {
-                  companyId,
-                  shopId: company.shopeeShopId,
-                  accessToken: company.shopeeAccessToken,
-                  refreshToken: company.shopeeRefreshToken,
-                  expiresAt: company.shopeeTokenExpiresAt,
-              }
-            : null;
-    return getShopeeApiPerformance(credentials);
+    return company?.shopeeShopId && company.shopeeAccessToken && company.shopeeRefreshToken
+        ? {
+              companyId,
+              shopId: company.shopeeShopId,
+              accessToken: company.shopeeAccessToken,
+              refreshToken: company.shopeeRefreshToken,
+              expiresAt: company.shopeeTokenExpiresAt,
+          }
+        : null;
+}
+
+export async function getShopeeApiPerformanceForCompany(companyId: bigint): Promise<ApiPerformanceResponse> {
+    return getShopeeApiPerformance(await getShopeeCredentialsForCompany(companyId));
 }
 
 // Shopee's ads performance APIs cap the range at 1 calendar month, counted inclusively
@@ -51,6 +54,15 @@ const AD_TYPE_LABEL_TH: Record<string, string> = {
     manual: "กำหนดเอง",
 };
 
+const CAMPAIGN_STATUS_LABEL_TH: Record<string, string> = {
+    ongoing: "กำลังทำงาน",
+    scheduled: "ตั้งเวลาไว้",
+    paused: "หยุดชั่วคราว",
+    ended: "สิ้นสุดแล้ว",
+    closed: "ปิดแล้ว",
+    deleted: "ลบแล้ว",
+};
+
 export interface ShopeeApiEnvelope {
     error?: string;
     message?: string;
@@ -64,7 +76,8 @@ export function shopeeResponseList<T>(response: unknown): T[] {
     return response && typeof response === "object" ? [response as T] : [];
 }
 
-export async function shopeeShopGet(path: string, shopId: string, accessToken: string, params: Record<string, string> = {}): Promise<ShopeeApiEnvelope> {
+/** An array value is sent as a repeated query parameter (e.g. item_status=NORMAL&item_status=UNLIST). */
+export async function shopeeShopGet(path: string, shopId: string, accessToken: string, params: Record<string, string | string[]> = {}): Promise<ShopeeApiEnvelope> {
     assertShopeeCallsAllowed();
     const timestamp = shopeeTimestamp();
     const sign = signShopeeRequest(path, timestamp, { accessToken, shopId });
@@ -75,7 +88,10 @@ export async function shopeeShopGet(path: string, shopId: string, accessToken: s
     url.searchParams.set("sign", sign);
     url.searchParams.set("access_token", accessToken);
     url.searchParams.set("shop_id", shopId);
-    for (const [key, value] of Object.entries(params)) url.searchParams.set(key, value);
+    for (const [key, value] of Object.entries(params)) {
+        if (Array.isArray(value)) value.forEach((v) => url.searchParams.append(key, v));
+        else url.searchParams.set(key, value);
+    }
 
     const response = await fetch(url.toString());
     const body = (await parseShopeeJson(response, path)) as ShopeeApiEnvelope;
@@ -267,6 +283,7 @@ const ORDER_DETAIL_BATCH = 50;
 interface ShopeeOrderDetail {
     order_sn: string;
     order_status?: string;
+    create_time?: number;
     item_list?: { item_id?: number; model_discounted_price?: number; model_quantity_purchased?: number }[];
 }
 
@@ -276,6 +293,8 @@ interface ShopeeCompletedSales {
     /** Completed sales per product: amount, and number of orders containing it. */
     byItem: Map<number, { sales: number; orders: number }>;
     orderSns: string[];
+    /** Per completed order: item sales and when it was placed (unix seconds). */
+    byOrder: Map<string, { sales: number; createTime: number | null }>;
 }
 
 /**
@@ -308,6 +327,7 @@ async function getShopeeCompletedSales(shopId: string, accessToken: string, sinc
     let orders = 0;
     const byItem = new Map<number, { sales: number; orders: number }>();
     const completedSns: string[] = [];
+    const byOrder = new Map<string, { sales: number; createTime: number | null }>();
     for (let i = 0; i < orderSns.length; i += ORDER_DETAIL_BATCH) {
         const detail = await shopeeShopGet("/api/v2/order/get_order_detail", shopId, accessToken, {
             order_sn_list: orderSns.slice(i, i + ORDER_DETAIL_BATCH).join(","),
@@ -319,9 +339,11 @@ async function getShopeeCompletedSales(shopId: string, accessToken: string, sinc
             orders += 1;
             completedSns.push(order.order_sn);
             const counted = new Set<number>();
+            let orderSales = 0;
             for (const item of order.item_list ?? []) {
                 const amount = (item.model_discounted_price ?? 0) * (item.model_quantity_purchased ?? 0);
                 sales += amount;
+                orderSales += amount;
                 if (item.item_id === undefined) continue;
                 const entry = byItem.get(item.item_id) ?? { sales: 0, orders: 0 };
                 entry.sales += amount;
@@ -330,9 +352,10 @@ async function getShopeeCompletedSales(shopId: string, accessToken: string, sinc
                 counted.add(item.item_id);
                 byItem.set(item.item_id, entry);
             }
+            byOrder.set(order.order_sn, { sales: orderSales, createTime: order.create_time ?? null });
         }
     }
-    return { sales, orders, byItem, orderSns: completedSns };
+    return { sales, orders, byItem, orderSns: completedSns, byOrder };
 }
 
 interface ShopeeOrderIncome {
@@ -345,15 +368,24 @@ interface ShopeeOrderIncome {
 
 // A COMPLETED order's escrow no longer changes, so keep it for the process lifetime: each order costs one
 // get_escrow_detail call (one order per call) only the first time it is seen.
-const escrowCache = new Map<string, { payout: number; fees: number }>();
+interface ShopeeEscrowEntry {
+    payout: number;
+    commission: number;
+    serviceFee: number;
+    transactionFee: number;
+}
+const escrowCache = new Map<string, ShopeeEscrowEntry>();
 const ESCROW_CONCURRENCY = 10;
 
+interface ShopeePayout {
+    payout: number;
+    fees: number;
+    counted: number;
+    byOrder: Map<string, ShopeeEscrowEntry>;
+}
+
 /** Money actually received for these orders (escrow), and Shopee's fees taken from them. */
-async function getShopeePayout(
-    shopId: string,
-    accessToken: string,
-    orderSns: string[],
-): Promise<{ payout: number; fees: number; counted: number }> {
+async function getShopeePayout(shopId: string, accessToken: string, orderSns: string[]): Promise<ShopeePayout> {
     const missing = orderSns.filter((sn) => !escrowCache.has(`${shopId}:${sn}`));
     for (let i = 0; i < missing.length; i += ESCROW_CONCURRENCY) {
         await Promise.all(
@@ -363,7 +395,9 @@ async function getShopeePayout(
                 if (!income) return; // not counted; retried next time
                 escrowCache.set(`${shopId}:${sn}`, {
                     payout: income.escrow_amount ?? 0,
-                    fees: (income.commission_fee ?? 0) + (income.service_fee ?? 0) + (income.seller_transaction_fee ?? 0),
+                    commission: income.commission_fee ?? 0,
+                    serviceFee: income.service_fee ?? 0,
+                    transactionFee: income.seller_transaction_fee ?? 0,
                 });
             }),
         );
@@ -372,14 +406,16 @@ async function getShopeePayout(
     let payout = 0;
     let fees = 0;
     let counted = 0;
+    const byOrder = new Map<string, ShopeeEscrowEntry>();
     for (const sn of orderSns) {
         const entry = escrowCache.get(`${shopId}:${sn}`);
         if (!entry) continue;
         payout += entry.payout;
-        fees += entry.fees;
+        fees += entry.commission + entry.serviceFee + entry.transactionFee;
         counted += 1;
+        byOrder.set(sn, entry);
     }
-    return { payout, fees, counted };
+    return { payout, fees, counted, byOrder };
 }
 
 // Overview and the Shopee page both load this on every visit; Shopee ads data only moves a few times a day,
@@ -442,7 +478,7 @@ async function fetchShopeeApiPerformance(credentials: ShopeeCredentials | null):
 
         // Real profit = money Shopee actually pays out (after commission/service/transaction fees, vouchers, shipping) − ad spend.
         // A Payment API failure (e.g. no payment permission) falls back to sales − spend, labelled as such.
-        let payout: { payout: number; fees: number; counted: number } | null = null;
+        let payout: ShopeePayout | null = null;
         let payoutError: string | null = null;
         if (completed) {
             try {
@@ -470,7 +506,7 @@ async function fetchShopeeApiPerformance(credentials: ShopeeCredentials | null):
 
         // Per row: completed sales of the product(s) the ad promotes (all completed orders of that product, ads or not --
         // Shopee doesn't say which completed order came from an ad). null when the products or orders are unknown.
-        const rowSales = (campaign: (typeof sortedCampaigns)[number]) => {
+        const rowSales = (campaign: ShopeeAdsSummary["campaigns"][number]) => {
             if (!completed || campaign.itemIds.length === 0) return null;
             return campaign.itemIds.reduce(
                 (total, itemId) => {
@@ -479,6 +515,34 @@ async function fetchShopeeApiPerformance(credentials: ShopeeCredentials | null):
                 },
                 { sales: 0, orders: 0 },
             );
+        };
+
+        const campaignColumns: TableColumn[] = [
+            { key: "name", label: "แคมเปญ" },
+            { key: "adType", label: "ประเภท", align: "center" },
+            { key: "startDate", label: "เริ่ม", align: "center" },
+            { key: "endDate", label: "หยุด", align: "center" },
+            { key: "spend", label: "ยอดใช้จ่าย", align: "right" },
+            { key: "sales", label: "ยอดขายจริง (ออเดอร์สำเร็จ)", align: "right" },
+            { key: "profitLoss", label: "กำไร/ขาดทุน", align: "right" },
+            { key: "roas", label: "ROAS", align: "right" },
+            { key: "orders", label: "ออเดอร์สำเร็จ", align: "right" },
+        ];
+        const campaignRow = (campaign: ShopeeAdsSummary["campaigns"][number]) => {
+            const real = rowSales(campaign);
+            const rowProfit = real ? real.sales - campaign.spend : null;
+            return {
+                id: campaign.id,
+                name: campaign.name,
+                adType: campaign.adType,
+                startDate: campaign.startDate,
+                endDate: campaign.endDate,
+                spend: `฿${campaign.spend.toLocaleString()}`,
+                sales: real ? `฿${real.sales.toLocaleString()}` : "-",
+                profitLoss: rowProfit === null ? "-" : `${rowProfit >= 0 ? "+" : ""}฿${rowProfit.toLocaleString()}`,
+                roas: real && campaign.spend > 0 ? (real.sales / campaign.spend).toFixed(2) : "-",
+                orders: real ? real.orders : "-",
+            };
         };
 
         const profitLoss = payoutComplete ? payout!.payout - spend : completed ? completed.sales - spend : null;
@@ -533,35 +597,47 @@ async function fetchShopeeApiPerformance(credentials: ShopeeCredentials | null):
                 cpl: campaign.orders > 0 ? campaign.spend / campaign.orders : 0,
                 status: campaign.adType,
             })),
-            table: {
-                columns: [
-                    { key: "name", label: "แคมเปญ" },
-                    { key: "adType", label: "ประเภท", align: "center" },
-                    { key: "startDate", label: "เริ่ม", align: "center" },
-                    { key: "endDate", label: "หยุด", align: "center" },
-                    { key: "spend", label: "ยอดใช้จ่าย", align: "right" },
-                    { key: "sales", label: "ยอดขายจริง (ออเดอร์สำเร็จ)", align: "right" },
-                    { key: "profitLoss", label: "กำไร/ขาดทุน", align: "right" },
-                    { key: "roas", label: "ROAS", align: "right" },
-                    { key: "orders", label: "ออเดอร์สำเร็จ", align: "right" },
-                ],
-                rows: sortedCampaigns.slice(0, 50).map((campaign) => {
-                    const real = rowSales(campaign);
-                    const rowProfit = real ? real.sales - campaign.spend : null;
-                    return {
-                        id: campaign.id,
-                        name: campaign.name,
-                        adType: campaign.adType,
-                        startDate: campaign.startDate,
-                        endDate: campaign.endDate,
-                        spend: `฿${campaign.spend.toLocaleString()}`,
-                        sales: real ? `฿${real.sales.toLocaleString()}` : "-",
-                        profitLoss: rowProfit === null ? "-" : `${rowProfit >= 0 ? "+" : ""}฿${rowProfit.toLocaleString()}`,
-                        roas: real && campaign.spend > 0 ? (real.sales / campaign.spend).toFixed(2) : "-",
-                        orders: real ? real.orders : "-",
-                    };
-                }),
+            table: { columns: campaignColumns, rows: sortedCampaigns.slice(0, 50).map(campaignRow) },
+            // Ads tab: every product ad, whatever its status, running ones first.
+            allAdsTable: {
+                columns: [campaignColumns[0], { key: "campaignStatus", label: "สถานะ", align: "center" }, ...campaignColumns.slice(1)],
+                rows: [...ads.campaigns]
+                    .sort((a, b) => Number(b.status === "ongoing") - Number(a.status === "ongoing") || b.spend - a.spend)
+                    .map((campaign) => ({
+                        ...campaignRow(campaign),
+                        campaignStatus: campaign.status ? (CAMPAIGN_STATUS_LABEL_TH[campaign.status] ?? campaign.status) : "-",
+                    })),
             },
+            // Payment tab: what Shopee paid out per completed order, newest first.
+            paymentsTable: completed
+                ? {
+                      columns: [
+                          { key: "orderSn", label: "เลขคำสั่งซื้อ" },
+                          { key: "orderDate", label: "วันที่สั่ง", align: "center" },
+                          { key: "sales", label: "ยอดขายสินค้า", align: "right" },
+                          { key: "commission", label: "ค่าคอมมิชชั่น", align: "right" },
+                          { key: "serviceFee", label: "ค่าบริการ", align: "right" },
+                          { key: "transactionFee", label: "ค่าธรรมเนียมธุรกรรม", align: "right" },
+                          { key: "payout", label: "เงินที่ได้รับจริง", align: "right" },
+                      ],
+                      rows: [...completed.byOrder.entries()]
+                          .sort((a, b) => (b[1].createTime ?? 0) - (a[1].createTime ?? 0))
+                          .map(([sn, order]) => {
+                              const escrow = payout?.byOrder.get(sn);
+                              const baht = (value: number | undefined) => (value === undefined ? "-" : `฿${value.toLocaleString()}`);
+                              return {
+                                  id: sn,
+                                  orderSn: sn,
+                                  orderDate: formatShopeeUnixDate(order.createTime ?? undefined),
+                                  sales: baht(order.sales),
+                                  commission: baht(escrow?.commission),
+                                  serviceFee: baht(escrow?.serviceFee),
+                                  transactionFee: baht(escrow?.transactionFee),
+                                  payout: baht(escrow?.payout),
+                              };
+                          }),
+                  }
+                : undefined,
         };
     } catch (error) {
         await handleShopeeAuthFailure(credentials.companyId, error);
