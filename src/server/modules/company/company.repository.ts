@@ -16,6 +16,8 @@ function decryptCompany<T extends Company | null>(company: T): T {
         tiktokAppSecret: decryptToken(company.tiktokAppSecret),
         shopeeAccessToken: decryptToken(company.shopeeAccessToken),
         shopeeRefreshToken: decryptToken(company.shopeeRefreshToken),
+        shopeeAdsAccessToken: decryptToken(company.shopeeAdsAccessToken),
+        shopeeAdsRefreshToken: decryptToken(company.shopeeAdsRefreshToken),
     };
 }
 
@@ -50,7 +52,32 @@ export async function clearShopeeCredentials(companyId: bigint) {
             shopeeAccessToken: null,
             shopeeRefreshToken: null,
             shopeeTokenExpiresAt: null,
+            shopeeAdsAccessToken: null,
+            shopeeAdsRefreshToken: null,
+            shopeeAdsTokenExpiresAt: null,
         },
+    });
+}
+
+/** Tokens of the separate Shopee Ads Service app (same shop, authorized to a second app). */
+export async function saveShopeeAdsCredentials(
+    companyId: bigint,
+    credentials: { accessToken: string; refreshToken: string; expiresAt: Date },
+) {
+    return prisma.company.update({
+        where: { id: companyId },
+        data: {
+            shopeeAdsAccessToken: encryptToken(credentials.accessToken),
+            shopeeAdsRefreshToken: encryptToken(credentials.refreshToken),
+            shopeeAdsTokenExpiresAt: credentials.expiresAt,
+        },
+    });
+}
+
+export async function clearShopeeAdsCredentials(companyId: bigint) {
+    return prisma.company.update({
+        where: { id: companyId },
+        data: { shopeeAdsAccessToken: null, shopeeAdsRefreshToken: null, shopeeAdsTokenExpiresAt: null },
     });
 }
 

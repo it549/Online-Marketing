@@ -1,12 +1,26 @@
 import { config } from "@/server/configurations/config";
-import { clearShopeeCredentials, getCompanyById, saveShopeeCredentials } from "@/server/modules/company/company.repository";
+import {
+    clearShopeeAdsCredentials,
+    clearShopeeCredentials,
+    getCompanyById,
+    saveShopeeAdsCredentials,
+    saveShopeeCredentials,
+} from "@/server/modules/company/company.repository";
 import { parseCompanyPlatforms } from "@/server/modules/company/companyPlatforms";
-import { shopeeTimestamp, signShopeeRequest } from "./shopeeSign";
+import { hasSeparateShopeeAdsApp, shopeeAppForPath, shopeePartner, shopeeTimestamp, signShopeeRequest, type ShopeeApp } from "./shopeeSign";
 
 export class ShopeeApiError extends Error {}
 
 /** The stored access token is no longer accepted by Shopee; only reconnecting the shop can fix it. */
-export class ShopeeInvalidTokenError extends ShopeeApiError {}
+export class ShopeeInvalidTokenError extends ShopeeApiError {
+    /** Which app's token was rejected -- only that app's stored tokens are dropped. */
+    constructor(
+        message: string,
+        readonly app: ShopeeApp = "main",
+    ) {
+        super(message);
+    }
+}
 
 export interface ShopeeCredentials {
     companyId: bigint;
@@ -110,7 +124,9 @@ export async function parseShopeeJson(response: Response, path: string): Promise
                 apiModule,
             );
         } else if (body?.error && SHOPEE_BLOCKING_ERRORS.has(body.error)) {
-            blockShopeeCalls(body.message ? `${body.message} (${body.error})` : String(body.error));
+            // A rejection from the separate Ads app says nothing about the main app, so it pauses only /ads.
+            const scope = shopeeAppForPath(path) === "ads" ? "ads" : GLOBAL_SCOPE;
+            blockShopeeCalls(body.message ? `${body.message} (${body.error})` : String(body.error), SHOPEE_BLOCK_COOLDOWN_MS, scope);
         } else if (body?.error === SHOPEE_RATE_LIMIT_ERROR) {
             blockShopeeCalls(`Shopee จำกัดจำนวนการเรียก API ชั่วคราว (${body.error})`, SHOPEE_RATE_LIMIT_COOLDOWN_MS);
         }
@@ -138,28 +154,42 @@ function assertNoShopeeError(body: ShopeeErrorBody, fallback: string): void {
 }
 
 /** Builds the Shopee "authorize this shop" URL the user's browser is redirected to. */
-export function buildShopeeAuthUrl(): string {
+export function buildShopeeAuthUrl(app: ShopeeApp = "main"): string {
     const path = "/api/v2/shop/auth_partner";
     const timestamp = shopeeTimestamp();
-    const sign = signShopeeRequest(path, timestamp);
+    const sign = signShopeeRequest(path, timestamp, undefined, app);
+
+    // The callback is shared; ?app=ads tells it which app's code it received.
+    const redirect = new URL(config.shopee.redirectUrl);
+    if (app === "ads") redirect.searchParams.set("app", "ads");
 
     const url = new URL(`${config.shopee.apiBaseUrl}${path}`);
-    url.searchParams.set("partner_id", config.shopee.partnerID);
+    url.searchParams.set("partner_id", shopeePartner(app).partnerID);
     url.searchParams.set("timestamp", String(timestamp));
     url.searchParams.set("sign", sign);
-    url.searchParams.set("redirect", config.shopee.redirectUrl);
+    url.searchParams.set("redirect", redirect.toString());
 
     return url.toString();
 }
 
-export async function getShopeeAuthorizationUrlForCompany(companyId: bigint): Promise<string | null> {
+export async function getShopeeAuthorizationUrlForCompany(companyId: bigint, app: ShopeeApp = "main"): Promise<string | null> {
     const company = await getCompanyById(companyId);
     if (!company || !parseCompanyPlatforms(company.platforms).includes("shopee")) return null;
-    return buildShopeeAuthUrl();
+    return buildShopeeAuthUrl(app);
 }
 
-export async function connectShopeeAccount(companyId: bigint, code: string, shopId: string): Promise<void> {
-    await saveShopeeCredentials(companyId, await exchangeShopeeCode(code, shopId));
+export async function connectShopeeAccount(companyId: bigint, code: string, shopId: string, app: ShopeeApp = "main"): Promise<void> {
+    if (app === "ads") {
+        const company = await getCompanyById(companyId);
+        if (company?.shopeeShopId && company.shopeeShopId !== shopId) {
+            throw new ShopeeApiError(
+                `ร้านที่อนุญาตแอป Shopee Ads (shop_id ${shopId}) ไม่ใช่ร้านเดียวกับที่เชื่อมต่อไว้ (shop_id ${company.shopeeShopId})`,
+            );
+        }
+        await saveShopeeAdsCredentials(companyId, await exchangeShopeeCode(code, shopId, app));
+    } else {
+        await saveShopeeCredentials(companyId, await exchangeShopeeCode(code, shopId));
+    }
     // A fresh token supersedes whatever rejection started the cooldown; otherwise the very next status check is blocked for up to 1h.
     shopeeBlocks.clear();
 }
@@ -175,27 +205,28 @@ export function disconnectShopeeAccount(companyId: bigint): Promise<unknown> {
 export async function handleShopeeAuthFailure(companyId: bigint, error: unknown): Promise<void> {
     if (!(error instanceof ShopeeInvalidTokenError)) return;
     try {
-        await clearShopeeCredentials(companyId);
+        await (error.app === "ads" ? clearShopeeAdsCredentials(companyId) : clearShopeeCredentials(companyId));
     } catch {
         // Best effort: the call cooldown still prevents repeated failing requests.
     }
 }
 
 /** Exchanges the OAuth `code` Shopee redirected back with for an access/refresh token pair. */
-export async function exchangeShopeeCode(code: string, shopId: string): Promise<ShopeeTokenResult> {
+export async function exchangeShopeeCode(code: string, shopId: string, app: ShopeeApp = "main"): Promise<ShopeeTokenResult> {
     const path = "/api/v2/auth/token/get";
     const timestamp = shopeeTimestamp();
-    const sign = signShopeeRequest(path, timestamp);
+    const sign = signShopeeRequest(path, timestamp, undefined, app);
+    const { partnerID } = shopeePartner(app);
 
     const url = new URL(`${config.shopee.apiBaseUrl}${path}`);
-    url.searchParams.set("partner_id", config.shopee.partnerID);
+    url.searchParams.set("partner_id", partnerID);
     url.searchParams.set("timestamp", String(timestamp));
     url.searchParams.set("sign", sign);
 
     const response = await fetch(url.toString(), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ code, shop_id: Number(shopId), partner_id: Number(config.shopee.partnerID) }),
+        body: JSON.stringify({ code, shop_id: Number(shopId), partner_id: Number(partnerID) }),
     });
 
     const body = await parseShopeeJson(response, path);
@@ -230,22 +261,43 @@ export async function ensureValidAccessToken(credentials: ShopeeCredentials): Pr
     return refreshed.accessToken;
 }
 
+/**
+ * Access token for /api/v2/ads calls: the separate Ads Service app's token when that app is configured
+ * (the shop authorizes it via "เชื่อมต่อ Shopee Ads"), otherwise the main app's token.
+ */
+export async function ensureValidAdsAccessToken(credentials: ShopeeCredentials): Promise<string> {
+    if (!hasSeparateShopeeAdsApp()) return ensureValidAccessToken(credentials);
+
+    const company = await getCompanyById(credentials.companyId);
+    if (!company?.shopeeAdsAccessToken || !company.shopeeAdsRefreshToken) {
+        throw new ShopeeApiError('ยังไม่ได้เชื่อมต่อแอป Shopee Ads (Ads Service) — ไปที่หน้า "การเชื่อมต่อ" แล้วกด "เชื่อมต่อ Shopee Ads"');
+    }
+
+    const expiresAt = company.shopeeAdsTokenExpiresAt;
+    if (expiresAt && expiresAt.getTime() - Date.now() >= 5 * 60 * 1000) return company.shopeeAdsAccessToken;
+
+    const refreshed = await refreshShopeeAccessToken(credentials.shopId, company.shopeeAdsRefreshToken, "ads");
+    await saveShopeeAdsCredentials(credentials.companyId, refreshed);
+    return refreshed.accessToken;
+}
+
 /** Refreshes an expired/near-expiry access token using the stored refresh token. */
-export async function refreshShopeeAccessToken(shopId: string, refreshToken: string): Promise<ShopeeTokenResult> {
+export async function refreshShopeeAccessToken(shopId: string, refreshToken: string, app: ShopeeApp = "main"): Promise<ShopeeTokenResult> {
     assertShopeeCallsAllowed();
     const path = "/api/v2/auth/access_token/get";
     const timestamp = shopeeTimestamp();
-    const sign = signShopeeRequest(path, timestamp);
+    const sign = signShopeeRequest(path, timestamp, undefined, app);
+    const { partnerID } = shopeePartner(app);
 
     const url = new URL(`${config.shopee.apiBaseUrl}${path}`);
-    url.searchParams.set("partner_id", config.shopee.partnerID);
+    url.searchParams.set("partner_id", partnerID);
     url.searchParams.set("timestamp", String(timestamp));
     url.searchParams.set("sign", sign);
 
     const response = await fetch(url.toString(), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ refresh_token: refreshToken, shop_id: Number(shopId), partner_id: Number(config.shopee.partnerID) }),
+        body: JSON.stringify({ refresh_token: refreshToken, shop_id: Number(shopId), partner_id: Number(partnerID) }),
     });
 
     const body = await parseShopeeJson(response, path);

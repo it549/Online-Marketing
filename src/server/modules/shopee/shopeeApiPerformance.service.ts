@@ -6,12 +6,13 @@ import {
     ShopeeInvalidTokenError,
     assertShopeeCallsAllowed,
     ensureValidAccessToken,
+    ensureValidAdsAccessToken,
     handleShopeeAuthFailure,
     isShopeeInvalidTokenError,
     parseShopeeJson,
     type ShopeeCredentials,
 } from "./shopeeAuth.service";
-import { shopeeTimestamp, signShopeeRequest } from "./shopeeSign";
+import { shopeeAppForPath, shopeePartner, shopeeTimestamp, signShopeeRequest } from "./shopeeSign";
 import { getCompanyById } from "@/server/modules/company/company.repository";
 
 export type { ShopeeCredentials } from "./shopeeAuth.service";
@@ -79,11 +80,12 @@ export function shopeeResponseList<T>(response: unknown): T[] {
 /** An array value is sent as a repeated query parameter (e.g. item_status=NORMAL&item_status=UNLIST). */
 export async function shopeeShopGet(path: string, shopId: string, accessToken: string, params: Record<string, string | string[]> = {}): Promise<ShopeeApiEnvelope> {
     assertShopeeCallsAllowed(path);
+    const app = shopeeAppForPath(path);
     const timestamp = shopeeTimestamp();
-    const sign = signShopeeRequest(path, timestamp, { accessToken, shopId });
+    const sign = signShopeeRequest(path, timestamp, { accessToken, shopId }, app);
 
     const url = new URL(`${config.shopee.apiBaseUrl}${path}`);
-    url.searchParams.set("partner_id", config.shopee.partnerID);
+    url.searchParams.set("partner_id", shopeePartner(app).partnerID);
     url.searchParams.set("timestamp", String(timestamp));
     url.searchParams.set("sign", sign);
     url.searchParams.set("access_token", accessToken);
@@ -97,7 +99,7 @@ export async function shopeeShopGet(path: string, shopId: string, accessToken: s
     const body = (await parseShopeeJson(response, path)) as ShopeeApiEnvelope;
 
     if (isShopeeInvalidTokenError(body)) {
-        throw new ShopeeInvalidTokenError("Token Shopee ไม่ตรงกับแอปปัจจุบัน (เปลี่ยน partner_id/host หรือ token หมดอายุ) — ล้างการเชื่อมต่อเดิมแล้ว กรุณากดเชื่อมต่อ Shopee ใหม่");
+        throw new ShopeeInvalidTokenError("Token Shopee ไม่ตรงกับแอปปัจจุบัน (เปลี่ยน partner_id/host หรือ token หมดอายุ) — ล้างการเชื่อมต่อเดิมแล้ว กรุณากดเชื่อมต่อ Shopee ใหม่", app);
     }
     if (body.error) {
         throw new ShopeeApiError(body.message ? `${body.message} (${body.error})` : `Shopee API error: ${body.error}`);
@@ -462,7 +464,7 @@ async function fetchShopeeApiPerformance(credentials: ShopeeCredentials | null):
         const accessToken = await ensureValidAccessToken(credentials);
 
         // No separate get_shop_info probe: the ads calls below reject a bad token themselves, and every extra call counts toward Shopee's 90% success-rate rule.
-        const ads = await getShopeeAdsSummary(credentials.shopId, accessToken);
+        const ads = await getShopeeAdsSummary(credentials.shopId, await ensureValidAdsAccessToken(credentials));
 
         // Sales = completed orders only (ads GMV also counts cancelled/unpaid/not-yet-received orders).
         // An Order API failure (e.g. app lacks order permission) must not hide the ads numbers, and must not fall back to ads GMV.

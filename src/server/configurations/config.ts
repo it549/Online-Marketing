@@ -12,6 +12,9 @@ const configurationEnvShema = z.object({
     SHOPEE_PARTNER_KEY: z.string().min(1),
     SHOPEE_API_BASE_URL: z.url(),
     SHOPEE_REDIRECT_URL: z.url(),
+    // Optional second Shopee app (App Category "Ads Service") used only for /api/v2/ads -- an ERP System app has no Ads permission.
+    SHOPEE_ADS_PARTNER_ID: z.string().optional(),
+    SHOPEE_ADS_PARTNER_KEY: z.string().optional(),
 
     CLIENT_ID: z.string(),
     CLIENT_SECRET: z.string(),
@@ -55,6 +58,10 @@ export const config = {
         partnerKey: env.SHOPEE_PARTNER_KEY,
         apiBaseUrl: env.SHOPEE_API_BASE_URL,
         redirectUrl: env.SHOPEE_REDIRECT_URL,
+        ads:
+            env.SHOPEE_ADS_PARTNER_ID && env.SHOPEE_ADS_PARTNER_KEY
+                ? { partnerID: env.SHOPEE_ADS_PARTNER_ID, partnerKey: env.SHOPEE_ADS_PARTNER_KEY }
+                : null,
     },
     google: {
         clientID: env.CLIENT_ID,

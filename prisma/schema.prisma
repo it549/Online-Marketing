@@ -33,6 +33,9 @@ model Company {
   shopeeAccessToken     String?            @map("shopee_access_token") @db.Text
   shopeeRefreshToken    String?            @map("shopee_refresh_token") @db.Text
   shopeeTokenExpiresAt  DateTime?          @map("shopee_token_expires_at")
+  shopeeAdsAccessToken    String?          @map("shopee_ads_access_token") @db.Text
+  shopeeAdsRefreshToken   String?          @map("shopee_ads_refresh_token") @db.Text
+  shopeeAdsTokenExpiresAt DateTime?        @map("shopee_ads_token_expires_at")
   createdAt             DateTime           @default(now()) @map("created_at")
   updatedAt             DateTime           @updatedAt @map("updated_at")
   campaigns           Campaign[]
