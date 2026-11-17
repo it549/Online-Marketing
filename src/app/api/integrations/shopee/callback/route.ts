@@ -30,7 +30,9 @@ export async function GET(request: NextRequest) {
 
     try {
         const companyId = await getSelectedCompanyId(request);
-        await connectShopeeAccount(companyId, code, shopId);
+        // ?app=ads was put on the redirect URL by the Ads Service app's authorization link.
+        const app = request.nextUrl.searchParams.get("app") === "ads" ? "ads" : "main";
+        await connectShopeeAccount(companyId, code, shopId, app);
 
         return redirectToIntegrations(request, "connected");
     } catch (error) {

@@ -308,6 +308,19 @@ function RetryButton({ label, loading, onClick }: { label: string; loading: bool
     );
 }
 
+/** Authorizes the shop to the separate Shopee "Ads Service" app, whose token is used only for ad data. */
+function ShopeeAdsConnectLink() {
+    return (
+        <a
+            href="/api/integrations/shopee/connect?app=ads"
+            className="flex w-fit items-center gap-2 rounded-lg border border-orange-300 px-3 py-1.5 text-xs font-medium text-orange-600 transition-colors hover:bg-orange-50"
+        >
+            <PlugZap className="h-3.5 w-3.5" strokeWidth={2} />
+            เชื่อมต่อ Shopee Ads
+        </a>
+    );
+}
+
 const SHOPEE_STATUS_MESSAGES: Record<string, string> = {
     connected: "เชื่อมต่อ Shopee สำเร็จแล้ว",
 };
@@ -612,15 +625,19 @@ export default function IntegrationsPage() {
                                         <Unplug className="h-3.5 w-3.5" strokeWidth={2} />
                                         ยกเลิกการเชื่อมต่อ
                                     </button>
+                                    <ShopeeAdsConnectLink />
                                 </div>
                             ) : (
-                                <a
-                                    href="/api/integrations/shopee/connect"
-                                    className="flex w-fit items-center gap-2 rounded-lg bg-orange-500 px-3 py-1.5 text-xs font-medium text-white shadow-sm transition-colors hover:bg-orange-600"
-                                >
-                                    <PlugZap className="h-3.5 w-3.5" strokeWidth={2} />
-                                    เชื่อมต่อ Shopee
-                                </a>
+                                <div className="flex items-center gap-2">
+                                    <a
+                                        href="/api/integrations/shopee/connect"
+                                        className="flex w-fit items-center gap-2 rounded-lg bg-orange-500 px-3 py-1.5 text-xs font-medium text-white shadow-sm transition-colors hover:bg-orange-600"
+                                    >
+                                        <PlugZap className="h-3.5 w-3.5" strokeWidth={2} />
+                                        เชื่อมต่อ Shopee
+                                    </a>
+                                    <ShopeeAdsConnectLink />
+                                </div>
                             )
                         }
                     />

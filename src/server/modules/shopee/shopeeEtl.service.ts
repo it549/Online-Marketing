@@ -1,7 +1,7 @@
 import type { Company } from "@prisma/client";
 import { saveEtlSyncResult } from "@/server/core/etl/etl-database.service";
 import type { NormalizedEtlSyncResult, PlatformSyncResult } from "@/server/core/etl/etl.types";
-import { ensureValidAccessToken, handleShopeeAuthFailure, type ShopeeCredentials } from "./shopeeAuth.service";
+import { ensureValidAdsAccessToken, handleShopeeAuthFailure, type ShopeeCredentials } from "./shopeeAuth.service";
 import { getShopeeCampaignPerformanceForDate } from "./shopeeEtl.repository";
 import { normalizeShopeeCampaignInsight, normalizeShopeeCampaignRef } from "./shopeeEtl.adapter";
 
@@ -28,7 +28,8 @@ export async function syncShopeeAdsForCompany(
 
     let campaignRows;
     try {
-        const accessToken = await ensureValidAccessToken(credentials);
+        // Ads-only sync: uses the Ads Service app's token when that app is configured.
+        const accessToken = await ensureValidAdsAccessToken(credentials);
         campaignRows = await getShopeeCampaignPerformanceForDate(credentials.shopId, accessToken, targetDate);
     } catch (error) {
         await handleShopeeAuthFailure(company.id, error);
