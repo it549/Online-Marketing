@@ -8,7 +8,8 @@ export async function GET(request: NextRequest) {
     if (guard.response) return guard.response;
 
     try {
-        const data = await getShopeeApiPerformanceForCompany(await getSelectedCompanyId(request));
+        const month = request.nextUrl.searchParams.get("month") ?? undefined;
+        const data = await getShopeeApiPerformanceForCompany(await getSelectedCompanyId(request), month);
         return NextResponse.json(data);
     } catch (error) {
         return NextResponse.json(
