@@ -7,6 +7,23 @@ echo Stopping anything on port 3002...
 powershell -NoProfile -Command "Get-NetTCPConnection -LocalPort 3002 -ErrorAction SilentlyContinue | Select-Object -ExpandProperty OwningProcess -Unique | Where-Object { $_ -gt 4 } | ForEach-Object { taskkill.exe /PID $_ /T /F }"
 
 echo.
+echo Applying database migrations and generating the Prisma client...
+call npx prisma migrate deploy
+if errorlevel 1 (
+    echo.
+    echo Database migration failed. Review the error above.
+    pause
+    exit /b 1
+)
+call npx prisma generate
+if errorlevel 1 (
+    echo.
+    echo Prisma client generation failed. Review the error above.
+    pause
+    exit /b 1
+)
+
+echo.
 echo Building the production app...
 call npm run build
 if errorlevel 1 (
