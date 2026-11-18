@@ -30,8 +30,42 @@ export async function getShopeeCredentialsForCompany(companyId: bigint): Promise
         : null;
 }
 
-export async function getShopeeApiPerformanceForCompany(companyId: bigint): Promise<ApiPerformanceResponse> {
-    return getShopeeApiPerformance(await getShopeeCredentialsForCompany(companyId));
+export async function getShopeeApiPerformanceForCompany(companyId: bigint, month?: string): Promise<ApiPerformanceResponse> {
+    return getShopeeApiPerformance(await getShopeeCredentialsForCompany(companyId), month);
+}
+
+/** One calendar month in Thai time. Ads take calendar days (adsStart/adsEnd, UTC-midnight dates); orders take instants (from/to). */
+interface ShopeeMonthRange {
+    adsStart: Date;
+    adsEnd: Date;
+    from: Date;
+    to: Date;
+    label: string;
+}
+
+const TH_MONTHS = ["มกราคม", "กุมภาพันธ์", "มีนาคม", "เมษายน", "พฤษภาคม", "มิถุนายน", "กรกฎาคม", "สิงหาคม", "กันยายน", "ตุลาคม", "พฤศจิกายน", "ธันวาคม"];
+const BANGKOK_OFFSET_MS = 7 * 60 * 60 * 1000;
+
+/** "2026-10" -> that month in Thai time, cut at now for the current month; null for a bad value or a future month. */
+function parseShopeeMonth(month: string | undefined): ShopeeMonthRange | null {
+    const match = month?.match(/^(\d{4})-(0[1-9]|1[0-2])$/);
+    if (!match) return null;
+    const year = Number(match[1]);
+    const monthIndex = Number(match[2]) - 1;
+
+    const bangkokNow = new Date(Date.now() + BANGKOK_OFFSET_MS);
+    const today = new Date(Date.UTC(bangkokNow.getUTCFullYear(), bangkokNow.getUTCMonth(), bangkokNow.getUTCDate()));
+    const adsStart = new Date(Date.UTC(year, monthIndex, 1));
+    if (adsStart > today) return null;
+    const lastDay = new Date(Date.UTC(year, monthIndex + 1, 0));
+
+    return {
+        adsStart,
+        adsEnd: lastDay < today ? lastDay : today,
+        from: new Date(adsStart.getTime() - BANGKOK_OFFSET_MS),
+        to: new Date(Math.min(Date.UTC(year, monthIndex + 1, 1) - BANGKOK_OFFSET_MS - 1000, Date.now())),
+        label: `เดือน${TH_MONTHS[monthIndex]} ${year + 543}`,
+    };
 }
 
 // Shopee's ads performance APIs cap the range at 1 calendar month, counted inclusively
@@ -175,8 +209,11 @@ interface ShopeeAdsSummary {
     }[];
 }
 
-/** Pulls shop-wide ad spend/GMV totals plus a per-campaign breakdown since the ads started (ADS_LOOKBACK_DAYS windows). */
-async function getShopeeAdsSummary(shopId: string, accessToken: string): Promise<ShopeeAdsSummary> {
+/**
+ * Pulls shop-wide ad spend/GMV totals plus a per-campaign breakdown since the ads started (ADS_LOOKBACK_DAYS windows),
+ * or for exactly one month when `range` is given.
+ */
+async function getShopeeAdsSummary(shopId: string, accessToken: string, range?: ShopeeMonthRange): Promise<ShopeeAdsSummary> {
     const campaignIdList = await shopeeShopGet("/api/v2/ads/get_product_level_campaign_id_list", shopId, accessToken, {
         ad_type: "all",
         offset: "0",
@@ -195,10 +232,10 @@ async function getShopeeAdsSummary(shopId: string, accessToken: string): Promise
     // Walk backwards one window at a time until a window has no ad spend (campaigns started
     // after it) or the safety cap is hit -- every window is a separate API call.
     const dayMs = 24 * 60 * 60 * 1000;
-    let windowEnd = new Date();
+    let windowEnd = range ? new Date(range.adsEnd) : new Date();
     let since = new Date(windowEnd);
-    const oldestAllowed = new Date(windowEnd);
-    oldestAllowed.setUTCMonth(oldestAllowed.getUTCMonth() - ADS_MAX_MONTHS);
+    const oldestAllowed = range ? new Date(range.adsStart) : new Date(windowEnd);
+    if (!range) oldestAllowed.setUTCMonth(oldestAllowed.getUTCMonth() - ADS_MAX_MONTHS);
     for (let i = 0; i < ADS_MAX_WINDOWS; i++) {
         if (windowEnd < oldestAllowed) break;
         const windowStart = new Date(Math.max(windowEnd.getTime() - ADS_LOOKBACK_DAYS * dayMs, oldestAllowed.getTime()));
@@ -207,7 +244,8 @@ async function getShopeeAdsSummary(shopId: string, accessToken: string): Promise
         const shopLevel = await shopeeShopGet("/api/v2/ads/get_all_cpc_ads_daily_performance", shopId, accessToken, dateParams);
         const dailyPoints = (shopLevel.response as unknown as ShopeeAdsDailyPoint[] | undefined) ?? [];
         const windowSpend = dailyPoints.reduce((sum, point) => sum + (point.expense ?? 0), 0);
-        if (i > 0 && windowSpend === 0) break;
+        // A chosen month is always read in full; only the open-ended lookback stops at the first window without spend.
+        if (!range && i > 0 && windowSpend === 0) break;
 
         totalSpend += windowSpend;
         since = windowStart;
@@ -303,9 +341,9 @@ interface ShopeeCompletedSales {
  * Real sales only: shop-wide orders created in [since, now] whose status is COMPLETED (buyer received, not
  * cancelled/unpaid/returned). Amount is item price after discount x quantity, excluding shipping -- the same basis as ads GMV.
  */
-async function getShopeeCompletedSales(shopId: string, accessToken: string, since: Date): Promise<ShopeeCompletedSales> {
+async function getShopeeCompletedSales(shopId: string, accessToken: string, since: Date, until?: Date): Promise<ShopeeCompletedSales> {
     const orderSns: string[] = [];
-    const nowSec = Math.floor(Date.now() / 1000);
+    const nowSec = Math.floor(Math.min(until?.getTime() ?? Date.now(), Date.now()) / 1000);
     for (let from = Math.floor(since.getTime() / 1000); from < nowSec; from += ORDER_WINDOW_DAYS * 86400) {
         const to = Math.min(from + ORDER_WINDOW_DAYS * 86400 - 1, nowSec);
         let cursor = "";
@@ -427,17 +465,19 @@ const performanceCache = new Map<string, { at: number; value: ApiPerformanceResp
 // Overview, the Shopee page and Integrations can load at the same moment; share one burst of Shopee calls instead of one each (error_rate_limit).
 const performanceInFlight = new Map<string, Promise<ApiPerformanceResponse>>();
 
-export async function getShopeeApiPerformance(credentials: ShopeeCredentials | null): Promise<ApiPerformanceResponse> {
-    if (!credentials) return fetchShopeeApiPerformance(credentials);
+/** `month` ("YYYY-MM") limits every number to that month; without it, the default lookback since the ads started. */
+export async function getShopeeApiPerformance(credentials: ShopeeCredentials | null, month?: string): Promise<ApiPerformanceResponse> {
+    const range = parseShopeeMonth(month);
+    if (!credentials) return fetchShopeeApiPerformance(credentials, range);
 
-    const cacheKey = `${credentials.companyId}:${credentials.shopId}`;
+    const cacheKey = `${credentials.companyId}:${credentials.shopId}:${range ? month : "latest"}`;
     const cached = performanceCache.get(cacheKey);
     if (cached && Date.now() - cached.at < PERFORMANCE_CACHE_TTL_MS) return cached.value;
 
     const pending = performanceInFlight.get(cacheKey);
     if (pending) return pending;
 
-    const request = fetchShopeeApiPerformance(credentials)
+    const request = fetchShopeeApiPerformance(credentials, range)
         .then((value) => {
             if (value.connected) performanceCache.set(cacheKey, { at: Date.now(), value });
             else performanceCache.delete(cacheKey);
@@ -448,7 +488,8 @@ export async function getShopeeApiPerformance(credentials: ShopeeCredentials | n
     return request;
 }
 
-async function fetchShopeeApiPerformance(credentials: ShopeeCredentials | null): Promise<ApiPerformanceResponse> {
+async function fetchShopeeApiPerformance(credentials: ShopeeCredentials | null, range: ShopeeMonthRange | null): Promise<ApiPerformanceResponse> {
+    const rangeLabel = range ? `เฉพาะ${range.label}` : ADS_DATE_RANGE_LABEL;
     if (!credentials) {
         return {
             connected: false,
@@ -464,14 +505,14 @@ async function fetchShopeeApiPerformance(credentials: ShopeeCredentials | null):
         const accessToken = await ensureValidAccessToken(credentials);
 
         // No separate get_shop_info probe: the ads calls below reject a bad token themselves, and every extra call counts toward Shopee's 90% success-rate rule.
-        const ads = await getShopeeAdsSummary(credentials.shopId, await ensureValidAdsAccessToken(credentials));
+        const ads = await getShopeeAdsSummary(credentials.shopId, await ensureValidAdsAccessToken(credentials), range ?? undefined);
 
         // Sales = completed orders only (ads GMV also counts cancelled/unpaid/not-yet-received orders).
         // An Order API failure (e.g. app lacks order permission) must not hide the ads numbers, and must not fall back to ads GMV.
         let completed: ShopeeCompletedSales | null = null;
         let completedError: string | null = null;
         try {
-            completed = await getShopeeCompletedSales(credentials.shopId, accessToken, ads.since);
+            completed = await getShopeeCompletedSales(credentials.shopId, accessToken, range?.from ?? ads.since, range?.to);
         } catch (error) {
             if (error instanceof ShopeeInvalidTokenError) throw error;
             console.warn("Shopee completed orders failed:", error);
@@ -495,16 +536,20 @@ async function fetchShopeeApiPerformance(credentials: ShopeeCredentials | null):
 
         // Only running ads count. If no status came back (setting-info call failed), use every campaign / the shop-wide total
         // rather than showing zero.
+        // A chosen month counts every ad that ran in it, even ones that have ended since.
         const statusKnown = ads.campaigns.some((campaign) => campaign.status !== null);
+        const onlyRunning = statusKnown && !range;
         const sortedCampaigns = ads.campaigns
-            .filter((campaign) => !statusKnown || campaign.status === "ongoing")
+            .filter((campaign) => !onlyRunning || campaign.status === "ongoing")
             // A product ad with no spend, GMV or orders in the range is noise.
             .filter((campaign) => campaign.spend !== 0 || campaign.gmv !== 0 || campaign.orders !== 0)
             .sort((a, b) => b.spend - a.spend);
-        const spend = statusKnown ? sortedCampaigns.reduce((sum, campaign) => sum + campaign.spend, 0) : ads.totalSpend;
-        const spendSubtitle = statusKnown
-            ? `เฉพาะ ${sortedCampaigns.length} โฆษณาที่เปิดอยู่ ${ADS_DATE_RANGE_LABEL}`
-            : `ทุกโฆษณา (ดึงสถานะแคมเปญไม่สำเร็จ) ${ADS_DATE_RANGE_LABEL}`;
+        const spend = onlyRunning ? sortedCampaigns.reduce((sum, campaign) => sum + campaign.spend, 0) : ads.totalSpend;
+        const spendSubtitle = onlyRunning
+            ? `เฉพาะ ${sortedCampaigns.length} โฆษณาที่เปิดอยู่ ${rangeLabel}`
+            : range
+              ? `ทุกโฆษณา ${rangeLabel}`
+              : `ทุกโฆษณา (ดึงสถานะแคมเปญไม่สำเร็จ) ${rangeLabel}`;
 
         // Per row: completed sales of the product(s) the ad promotes (all completed orders of that product, ads or not --
         // Shopee doesn't say which completed order came from an ad). null when the products or orders are unknown.
@@ -557,7 +602,7 @@ async function fetchShopeeApiPerformance(credentials: ShopeeCredentials | null):
                 label: "ยอดขายจริง (ออเดอร์สำเร็จ)",
                 value: completed ? `฿${completed.sales.toLocaleString()}` : "-",
                 subtitle: completed
-                    ? `${completed.orders.toLocaleString()} ออเดอร์ที่สำเร็จแล้ว (ไม่รวมยกเลิก/ยังไม่ได้รับสินค้า) ทั้งร้าน ${ADS_DATE_RANGE_LABEL}`
+                    ? `${completed.orders.toLocaleString()} ออเดอร์ที่สำเร็จแล้ว (ไม่รวมยกเลิก/ยังไม่ได้รับสินค้า) ทั้งร้าน ${rangeLabel}`
                     : `ดึงออเดอร์ไม่สำเร็จ: ${completedError}`,
                 color: "text-sky-600",
             },
@@ -588,7 +633,7 @@ async function fetchShopeeApiPerformance(credentials: ShopeeCredentials | null):
         return {
             connected: true,
             lastSyncedAt: new Date().toISOString(),
-            dateRangeLabel: ADS_DATE_RANGE_LABEL,
+            dateRangeLabel: rangeLabel,
             metrics,
             summary: { spend, leads: completed?.orders ?? 0, roas, revenue: completed?.sales },
             campaigns: sortedCampaigns.map((campaign) => ({

@@ -3,12 +3,13 @@
 import { useCallback, useEffect, useState } from "react";
 import { ApiPerformanceResponse } from "@/types/apiPerformance";
 
-// Loaded once per page open and shared by every component (Shopee tab, Integrations) so switching tabs
+// Loaded once per page open (per month) and shared by every component (Shopee tabs, Integrations) so switching tabs
 // does not call Shopee again; only refetch() (sync button / disconnect) or a page reload asks for fresh data.
-let sharedRequest: Promise<ApiPerformanceResponse> | null = null;
+const sharedRequests = new Map<string, Promise<ApiPerformanceResponse>>();
 
-async function requestShopeeApiPerformance(): Promise<ApiPerformanceResponse> {
-    const response = await fetch("/api/dashboard/shopee/api-performance");
+async function requestShopeeApiPerformance(month: string): Promise<ApiPerformanceResponse> {
+    const query = month ? `?month=${encodeURIComponent(month)}` : "";
+    const response = await fetch(`/api/dashboard/shopee/api-performance${query}`);
     const result = await response.json();
 
     if (!response.ok) {
@@ -18,26 +19,35 @@ async function requestShopeeApiPerformance(): Promise<ApiPerformanceResponse> {
     return result;
 }
 
-export function useShopeeApiPerformance() {
+/** `month` is "YYYY-MM"; empty/omitted = the default lookback since the ads started. */
+export function useShopeeApiPerformance(month = "") {
     const [data, setData] = useState<ApiPerformanceResponse | null>(null);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
 
-    const load = useCallback(async (force: boolean) => {
-        if (force || !sharedRequest) sharedRequest = requestShopeeApiPerformance();
-        const request = sharedRequest;
+    const load = useCallback(
+        async (force: boolean) => {
+            let request = sharedRequests.get(month);
+            if (force || !request) {
+                // A newly chosen month must not keep showing the previous month's numbers while it loads.
+                if (!force) setData(null);
+                request = requestShopeeApiPerformance(month);
+                sharedRequests.set(month, request);
+            }
 
-        try {
-            setLoading(true);
-            setData(await request);
-            setError(null);
-        } catch (err) {
-            setData(null);
-            setError(err instanceof Error ? err.message : "เกิดข้อผิดพลาด");
-        } finally {
-            setLoading(false);
-        }
-    }, []);
+            try {
+                setLoading(true);
+                setData(await request);
+                setError(null);
+            } catch (err) {
+                setData(null);
+                setError(err instanceof Error ? err.message : "เกิดข้อผิดพลาด");
+            } finally {
+                setLoading(false);
+            }
+        },
+        [month],
+    );
 
     const refetch = useCallback(() => load(true), [load]);
 

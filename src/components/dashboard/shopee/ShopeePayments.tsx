@@ -7,8 +7,8 @@ import DashboardTable from "../DashboardTable";
 import { useShopeeApiPerformance } from "@/hooks/useShopeeApiPerformance";
 
 /** Payout per completed order (Payment API escrow). Shares the Overview tab's request, so opening this tab costs no extra Shopee calls. */
-export default function ShopeePayments() {
-    const { data, loading, error, refetch } = useShopeeApiPerformance();
+export default function ShopeePayments({ month = "" }: { month?: string }) {
+    const { data, loading, error, refetch } = useShopeeApiPerformance(month);
     const table = data?.paymentsTable;
 
     return (

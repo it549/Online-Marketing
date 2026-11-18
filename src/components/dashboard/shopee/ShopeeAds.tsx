@@ -7,8 +7,8 @@ import DashboardTable from "../DashboardTable";
 import { useShopeeApiPerformance } from "@/hooks/useShopeeApiPerformance";
 
 /** Every Shopee product ad, any status. Shares the Overview tab's request, so opening this tab costs no extra Shopee calls. */
-export default function ShopeeAds() {
-    const { data, loading, error, refetch } = useShopeeApiPerformance();
+export default function ShopeeAds({ month = "" }: { month?: string }) {
+    const { data, loading, error, refetch } = useShopeeApiPerformance(month);
     const table = data?.allAdsTable;
 
     return (
