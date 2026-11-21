@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Megaphone, Package, Wallet } from "lucide-react";
+import { Megaphone, Package, ShoppingCart, Wallet } from "lucide-react";
 import PlatformPageHeader from "./PlatformPageHeader";
 import PlatformSubTabs, { PLATFORM_TABS, PlatformTab, SubTabDef, getInitialPlatformTab } from "./PlatformSubTabs";
 import PlatformInsightsPanel from "./insights/PlatformInsightsPanel";
@@ -11,15 +11,17 @@ import ShopeeAiInsights from "./shopee/ShopeeAiInsights";
 import ShopeeProducts from "./shopee/ShopeeProducts";
 import ShopeeAds from "./shopee/ShopeeAds";
 import ShopeePayments from "./shopee/ShopeePayments";
+import ShopeeOrders from "./shopee/ShopeeOrders";
 import ShopeeMonthSelect from "./shopee/ShopeeMonthSelect";
 import { useSelectedCompany } from "@/hooks/useSelectedCompany";
 
-type ShopeeTab = PlatformTab | "products" | "ads" | "payments";
+type ShopeeTab = PlatformTab | "products" | "orders" | "ads" | "payments";
 
 // Shopee-only tabs after Overview: the whole product catalogue and every ad (any status).
 const SHOPEE_TABS: SubTabDef<ShopeeTab>[] = [
     PLATFORM_TABS[0],
     { id: "products", label: "สินค้า", icon: Package },
+    { id: "orders", label: "ออเดอร์", icon: ShoppingCart },
     { id: "ads", label: "โฆษณา", icon: Megaphone },
     { id: "payments", label: "การเงิน", icon: Wallet },
     ...PLATFORM_TABS.slice(1),
@@ -27,7 +29,7 @@ const SHOPEE_TABS: SubTabDef<ShopeeTab>[] = [
 
 function getInitialShopeeTab(): ShopeeTab {
     const requested = typeof window !== "undefined" ? new URLSearchParams(window.location.search).get("tab") : null;
-    if (requested === "products" || requested === "ads" || requested === "payments") return requested;
+    if (requested === "products" || requested === "orders" || requested === "ads" || requested === "payments") return requested;
     return getInitialPlatformTab();
 }
 
@@ -43,11 +45,12 @@ export default function ShopeeDashboard() {
 
             <PlatformSubTabs value={tab} onChange={setTab} tabs={SHOPEE_TABS} />
 
-            {/* Overview, Ads and Payments share one Shopee request, so one month choice drives all three. */}
-            {(tab === "overview" || tab === "ads" || tab === "payments") && <ShopeeMonthSelect value={month} onChange={setMonth} />}
+            {/* Overview, Orders, Ads and Payments share one Shopee request, so one month choice drives all of them. */}
+            {(tab === "overview" || tab === "orders" || tab === "ads" || tab === "payments") && <ShopeeMonthSelect value={month} onChange={setMonth} />}
 
             {tab === "overview" && <ShopeeApiPerformance month={month} />}
             {tab === "products" && <ShopeeProducts />}
+            {tab === "orders" && <ShopeeOrders month={month} />}
             {tab === "ads" && <ShopeeAds month={month} />}
             {tab === "payments" && <ShopeePayments month={month} />}
             {tab === "content" && <ShopeeImportedAnalytics />}

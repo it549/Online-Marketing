@@ -324,8 +324,37 @@ interface ShopeeOrderDetail {
     order_sn: string;
     order_status?: string;
     create_time?: number;
-    item_list?: { item_id?: number; model_discounted_price?: number; model_quantity_purchased?: number }[];
+    total_amount?: number;
+    cancel_reason?: string;
+    item_list?: { item_id?: number; item_name?: string; model_discounted_price?: number; model_quantity_purchased?: number }[];
 }
+
+/** Any order in the range, whatever its status (Orders tab). */
+interface ShopeeOrderSummary {
+    orderSn: string;
+    status: string;
+    createTime: number | null;
+    /** Item price after discount x quantity, excluding shipping. */
+    sales: number;
+    /** What the buyer paid (Shopee total_amount); null when not returned. */
+    totalAmount: number | null;
+    items: string;
+    cancelReason: string | null;
+}
+
+const ORDER_STATUS_LABEL_TH: Record<string, string> = {
+    UNPAID: "ยังไม่ชำระเงิน",
+    READY_TO_SHIP: "ที่ต้องจัดส่ง",
+    PROCESSED: "เตรียมจัดส่งแล้ว",
+    RETRY_SHIP: "จัดส่งใหม่",
+    SHIPPED: "กำลังจัดส่ง",
+    TO_CONFIRM_RECEIVE: "รอผู้ซื้อยืนยันรับสินค้า",
+    IN_CANCEL: "กำลังยกเลิก",
+    CANCELLED: "ยกเลิกแล้ว",
+    TO_RETURN: "คืนเงิน/คืนสินค้า",
+    INVOICE_PENDING: "รอใบแจ้งหนี้",
+    COMPLETED: "สำเร็จ",
+};
 
 interface ShopeeCompletedSales {
     sales: number;
@@ -335,6 +364,8 @@ interface ShopeeCompletedSales {
     orderSns: string[];
     /** Per completed order: item sales and when it was placed (unix seconds). */
     byOrder: Map<string, { sales: number; createTime: number | null }>;
+    /** Every order created in the range, any status. */
+    allOrders: ShopeeOrderSummary[];
 }
 
 /**
@@ -354,7 +385,7 @@ async function getShopeeCompletedSales(shopId: string, accessToken: string, sinc
                 time_to: String(to),
                 page_size: String(ORDER_PAGE_SIZE),
                 cursor,
-                order_status: "COMPLETED",
+                // No status filter: the Orders tab lists unsuccessful orders too. Sales below still count COMPLETED only.
             });
             const body = page.response as { order_list?: { order_sn: string }[]; more?: boolean; next_cursor?: string } | undefined;
             orderSns.push(...(body?.order_list ?? []).map((order) => order.order_sn));
@@ -368,13 +399,23 @@ async function getShopeeCompletedSales(shopId: string, accessToken: string, sinc
     const byItem = new Map<number, { sales: number; orders: number }>();
     const completedSns: string[] = [];
     const byOrder = new Map<string, { sales: number; createTime: number | null }>();
+    const allOrders: ShopeeOrderSummary[] = [];
     for (let i = 0; i < orderSns.length; i += ORDER_DETAIL_BATCH) {
         const detail = await shopeeShopGet("/api/v2/order/get_order_detail", shopId, accessToken, {
             order_sn_list: orderSns.slice(i, i + ORDER_DETAIL_BATCH).join(","),
-            response_optional_fields: "item_list",
+            response_optional_fields: "item_list,total_amount,cancel_reason",
         });
         const list = (detail.response as { order_list?: ShopeeOrderDetail[] } | undefined)?.order_list ?? [];
         for (const order of list) {
+            allOrders.push({
+                orderSn: order.order_sn,
+                status: order.order_status ?? "",
+                createTime: order.create_time ?? null,
+                sales: (order.item_list ?? []).reduce((sum, item) => sum + (item.model_discounted_price ?? 0) * (item.model_quantity_purchased ?? 0), 0),
+                totalAmount: order.total_amount ?? null,
+                items: (order.item_list ?? []).map((item) => `${item.item_name ?? item.item_id ?? "-"} x${item.model_quantity_purchased ?? 0}`).join(", "),
+                cancelReason: order.cancel_reason || null,
+            });
             if (order.order_status !== "COMPLETED") continue;
             orders += 1;
             completedSns.push(order.order_sn);
@@ -395,7 +436,7 @@ async function getShopeeCompletedSales(shopId: string, accessToken: string, sinc
             byOrder.set(order.order_sn, { sales: orderSales, createTime: order.create_time ?? null });
         }
     }
-    return { sales, orders, byItem, orderSns: completedSns, byOrder };
+    return { sales, orders, byItem, orderSns: completedSns, byOrder, allOrders };
 }
 
 interface ShopeeOrderIncome {
@@ -683,6 +724,33 @@ async function fetchShopeeApiPerformance(credentials: ShopeeCredentials | null, 
                                   payout: baht(escrow?.payout),
                               };
                           }),
+                  }
+                : undefined,
+            // Orders tab: every order in the range, any status, newest first. `outcome` (not a column) drives the success filter.
+            ordersTable: completed
+                ? {
+                      columns: [
+                          { key: "orderSn", label: "เลขคำสั่งซื้อ" },
+                          { key: "orderDate", label: "วันที่สั่ง", align: "center" },
+                          { key: "orderStatus", label: "สถานะ", align: "center" },
+                          { key: "items", label: "สินค้า" },
+                          { key: "sales", label: "ยอดขายสินค้า", align: "right" },
+                          { key: "totalAmount", label: "ยอดที่ผู้ซื้อจ่าย", align: "right" },
+                          { key: "cancelReason", label: "เหตุผลยกเลิก" },
+                      ],
+                      rows: [...completed.allOrders]
+                          .sort((a, b) => (b.createTime ?? 0) - (a.createTime ?? 0))
+                          .map((order) => ({
+                              id: order.orderSn,
+                              outcome: order.status === "COMPLETED" ? "completed" : "failed",
+                              orderSn: order.orderSn,
+                              orderDate: formatShopeeUnixDate(order.createTime ?? undefined),
+                              orderStatus: ORDER_STATUS_LABEL_TH[order.status] ?? (order.status || "-"),
+                              items: order.items || "-",
+                              sales: `฿${order.sales.toLocaleString()}`,
+                              totalAmount: order.totalAmount === null ? "-" : `฿${order.totalAmount.toLocaleString()}`,
+                              cancelReason: order.cancelReason ?? "-",
+                          })),
                   }
                 : undefined,
         };
