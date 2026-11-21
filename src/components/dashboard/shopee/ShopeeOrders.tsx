@@ -6,6 +6,7 @@ import DashboardLoading from "../DashboardLoading";
 import DashboardError from "../DashboardError";
 import DashboardTable from "../DashboardTable";
 import { useShopeeApiPerformance } from "@/hooks/useShopeeApiPerformance";
+import type { TableRow } from "@/types/table";
 
 type OutcomeFilter = "all" | "completed" | "failed";
 
@@ -20,7 +21,9 @@ export default function ShopeeOrders({ month = "" }: { month?: string }) {
     const { data, loading, error, refetch } = useShopeeApiPerformance(month);
     const [outcome, setOutcome] = useState<OutcomeFilter>("all");
     const table = data?.ordersTable;
-    const countOf = (value: OutcomeFilter) => (table ? table.rows.filter((row) => value === "all" || row.outcome === value).length : 0);
+    // Rows are one per product option, so count distinct orders, not rows.
+    const orderCount = (rows: TableRow[]) => new Set(rows.map((row) => row.orderKey)).size;
+    const countOf = (value: OutcomeFilter) => (table ? orderCount(table.rows.filter((row) => value === "all" || row.outcome === value)) : 0);
     const filtered = table && { ...table, rows: table.rows.filter((row) => outcome === "all" || row.outcome === outcome) };
 
     return (
@@ -62,7 +65,7 @@ export default function ShopeeOrders({ month = "" }: { month?: string }) {
             {data?.connected && !table && <DashboardError message="ดึงออเดอร์จาก Shopee ไม่สำเร็จ" />}
 
             {data?.connected && filtered && (
-                <DashboardTable title={`ออเดอร์ (${filtered.rows.length.toLocaleString()})`} table={filtered} />
+                <DashboardTable title={`ออเดอร์ (${orderCount(filtered.rows).toLocaleString()} ออเดอร์ · ${filtered.rows.length.toLocaleString()} รายการสินค้า)`} table={filtered} />
             )}
         </div>
     );

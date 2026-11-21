@@ -21,7 +21,7 @@ export interface ApiPerformanceResponse {
     allAdsTable?: DashboardTable;
     /** Per completed order: sales, Shopee fees and payout (Payment API escrow). Shopee only. */
     paymentsTable?: DashboardTable;
-    /** Every order in the range, any status; each row has `outcome: "completed" | "failed"`. Shopee only. */
+    /** Every order in the range, any status, one row per product option; each row has `outcome: "completed" | "failed"` and `orderKey` (order SN). Shopee only. */
     ordersTable?: DashboardTable;
     /** Raw totals for cross-platform aggregation (Overview page). Only present when connected. */
     summary?: {

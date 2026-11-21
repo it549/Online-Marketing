@@ -326,7 +326,14 @@ interface ShopeeOrderDetail {
     create_time?: number;
     total_amount?: number;
     cancel_reason?: string;
-    item_list?: { item_id?: number; item_name?: string; model_discounted_price?: number; model_quantity_purchased?: number }[];
+    item_list?: {
+        item_id?: number;
+        item_name?: string;
+        model_id?: number;
+        model_name?: string;
+        model_discounted_price?: number;
+        model_quantity_purchased?: number;
+    }[];
 }
 
 /** Any order in the range, whatever its status (Orders tab). */
@@ -338,7 +345,8 @@ interface ShopeeOrderSummary {
     sales: number;
     /** What the buyer paid (Shopee total_amount); null when not returned. */
     totalAmount: number | null;
-    items: string;
+    /** One line per product option (model): the same product in two options is two lines. */
+    lines: { key: string; name: string; variation: string; quantity: number; sales: number }[];
     cancelReason: string | null;
 }
 
@@ -413,7 +421,13 @@ async function getShopeeCompletedSales(shopId: string, accessToken: string, sinc
                 createTime: order.create_time ?? null,
                 sales: (order.item_list ?? []).reduce((sum, item) => sum + (item.model_discounted_price ?? 0) * (item.model_quantity_purchased ?? 0), 0),
                 totalAmount: order.total_amount ?? null,
-                items: (order.item_list ?? []).map((item) => `${item.item_name ?? item.item_id ?? "-"} x${item.model_quantity_purchased ?? 0}`).join(", "),
+                lines: (order.item_list ?? []).map((item, index) => ({
+                    key: `${item.item_id ?? "x"}-${item.model_id ?? index}`,
+                    name: item.item_name ?? (item.item_id !== undefined ? `สินค้า #${item.item_id}` : "-"),
+                    variation: item.model_name || "-",
+                    quantity: item.model_quantity_purchased ?? 0,
+                    sales: (item.model_discounted_price ?? 0) * (item.model_quantity_purchased ?? 0),
+                })),
                 cancelReason: order.cancel_reason || null,
             });
             if (order.order_status !== "COMPLETED") continue;
@@ -726,31 +740,41 @@ async function fetchShopeeApiPerformance(credentials: ShopeeCredentials | null, 
                           }),
                   }
                 : undefined,
-            // Orders tab: every order in the range, any status, newest first. `outcome` (not a column) drives the success filter.
+            // Orders tab: every order in the range, any status, newest first -- one row per product option, so the same
+            // product bought in two options shows as two rows. Order-level amounts sit on the order's first row only.
+            // `outcome` and `orderKey` (not columns) drive the success filter and the distinct-order count.
             ordersTable: completed
                 ? {
                       columns: [
                           { key: "orderSn", label: "เลขคำสั่งซื้อ" },
                           { key: "orderDate", label: "วันที่สั่ง", align: "center" },
                           { key: "orderStatus", label: "สถานะ", align: "center" },
-                          { key: "items", label: "สินค้า" },
+                          { key: "itemName", label: "สินค้า" },
+                          { key: "variation", label: "ตัวเลือกสินค้า" },
+                          { key: "quantity", label: "จำนวน", align: "right" },
                           { key: "sales", label: "ยอดขายสินค้า", align: "right" },
-                          { key: "totalAmount", label: "ยอดที่ผู้ซื้อจ่าย", align: "right" },
+                          { key: "totalAmount", label: "ยอดที่ผู้ซื้อจ่าย (ทั้งออเดอร์)", align: "right" },
                           { key: "cancelReason", label: "เหตุผลยกเลิก" },
                       ],
                       rows: [...completed.allOrders]
                           .sort((a, b) => (b.createTime ?? 0) - (a.createTime ?? 0))
-                          .map((order) => ({
-                              id: order.orderSn,
-                              outcome: order.status === "COMPLETED" ? "completed" : "failed",
-                              orderSn: order.orderSn,
-                              orderDate: formatShopeeUnixDate(order.createTime ?? undefined),
-                              orderStatus: ORDER_STATUS_LABEL_TH[order.status] ?? (order.status || "-"),
-                              items: order.items || "-",
-                              sales: `฿${order.sales.toLocaleString()}`,
-                              totalAmount: order.totalAmount === null ? "-" : `฿${order.totalAmount.toLocaleString()}`,
-                              cancelReason: order.cancelReason ?? "-",
-                          })),
+                          .flatMap((order) => {
+                              const lines = order.lines.length > 0 ? order.lines : [{ key: "none", name: "-", variation: "-", quantity: 0, sales: 0 }];
+                              return lines.map((line, index) => ({
+                                  id: `${order.orderSn}:${line.key}:${index}`,
+                                  orderKey: order.orderSn,
+                                  outcome: order.status === "COMPLETED" ? "completed" : "failed",
+                                  orderSn: order.orderSn,
+                                  orderDate: formatShopeeUnixDate(order.createTime ?? undefined),
+                                  orderStatus: ORDER_STATUS_LABEL_TH[order.status] ?? (order.status || "-"),
+                                  itemName: line.name,
+                                  variation: line.variation,
+                                  quantity: line.quantity.toLocaleString(),
+                                  sales: `฿${line.sales.toLocaleString()}`,
+                                  totalAmount: index > 0 || order.totalAmount === null ? "-" : `฿${order.totalAmount.toLocaleString()}`,
+                                  cancelReason: index > 0 ? "-" : (order.cancelReason ?? "-"),
+                              }));
+                          }),
                   }
                 : undefined,
         };
