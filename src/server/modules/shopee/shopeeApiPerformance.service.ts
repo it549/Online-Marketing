@@ -531,31 +531,191 @@ interface ShopeeCostSummary {
     cogs: number;
     /** Distinct products sold in completed orders that have no cost entered. */
     missingItems: number;
-    /** Per product: payout share (order payout split by line sales) and cost of goods. */
-    byItem: Map<number, { payout: number; cogs: number }>;
+    /** Per product: completed quantity/sales, payout share (order payout split by line sales), cost of goods, and quantity still on its way to completion. */
+    byItem: Map<number, ShopeeItemTotals>;
 }
+
+interface ShopeeItemTotals {
+    name: string;
+    quantity: number;
+    sales: number;
+    payout: number;
+    cogs: number;
+    hasCost: boolean;
+    pendingQuantity: number;
+}
+
+// Paid orders not yet COMPLETED (shipping / awaiting receipt) -- likely sales, not counted in profit until completed.
+const PENDING_ORDER_STATUSES = new Set(["READY_TO_SHIP", "PROCESSED", "RETRY_SHIP", "SHIPPED", "TO_CONFIRM_RECEIVE", "INVOICE_PENDING"]);
 
 /** COGS = quantity x unit cost per completed line; payout of an order is split over its lines by sales share. */
 function summarizeShopeeCosts(completed: ShopeeCompletedSales, payout: ShopeePayout | null, costs: ShopeeProductCosts): ShopeeCostSummary {
     let cogs = 0;
     const missing = new Set<number>();
-    const byItem = new Map<number, { payout: number; cogs: number }>();
+    const byItem = new Map<number, ShopeeItemTotals>();
     for (const order of completed.allOrders) {
-        if (order.status !== "COMPLETED") continue;
+        const isCompleted = order.status === "COMPLETED";
+        if (!isCompleted && !PENDING_ORDER_STATUSES.has(order.status)) continue;
         const orderPayout = payout?.byOrder.get(order.orderSn)?.payout;
         for (const line of order.lines) {
             if (line.itemId === null) continue;
             const unitCost = costs[String(line.itemId)];
+            const entry = byItem.get(line.itemId) ?? { name: line.name, quantity: 0, sales: 0, payout: 0, cogs: 0, hasCost: unitCost !== undefined, pendingQuantity: 0 };
+            byItem.set(line.itemId, entry);
+            if (!isCompleted) {
+                entry.pendingQuantity += line.quantity;
+                continue;
+            }
             const lineCogs = unitCost === undefined ? 0 : unitCost * line.quantity;
             if (unitCost === undefined) missing.add(line.itemId);
             cogs += lineCogs;
-            const entry = byItem.get(line.itemId) ?? { payout: 0, cogs: 0 };
+            entry.quantity += line.quantity;
+            entry.sales += line.sales;
             entry.cogs += lineCogs;
             if (orderPayout !== undefined && order.sales > 0) entry.payout += (orderPayout * line.sales) / order.sales;
-            byItem.set(line.itemId, entry);
         }
     }
     return { cogs, missingItems: missing.size, byItem };
+}
+
+/**
+ * Sales tab: profit/loss per product sold in the range (completed orders). Ad spend per product = spend of each ad
+ * that promotes it, split evenly over that ad's products; spend not tied to a product (unknown products, shop-level ads)
+ * gets its own row, so the total row matches the shop's whole ad spend.
+ */
+function buildShopeeSalesReport(costSummary: ShopeeCostSummary, ads: ShopeeAdsSummary, payoutComplete: boolean, rangeLabel: string) {
+    const adSpendByItem = new Map<number, number>();
+    let assignedSpend = 0;
+    for (const campaign of ads.campaigns) {
+        if (campaign.spend === 0 || campaign.itemIds.length === 0) continue;
+        assignedSpend += campaign.spend;
+        for (const itemId of campaign.itemIds) adSpendByItem.set(itemId, (adSpendByItem.get(itemId) ?? 0) + campaign.spend / campaign.itemIds.length);
+    }
+    const unassignedSpend = Math.max(ads.totalSpend - assignedSpend, 0);
+
+    const baht = (value: number) => `฿${Math.round(value).toLocaleString()}`;
+    const signedBaht = (value: number) => `${value >= 0 ? "+" : "-"}${baht(Math.abs(value))}`;
+    const percent = (profit: number, sales: number) => (sales > 0 ? `${((profit / sales) * 100).toFixed(1)}%` : "-");
+
+    const itemIds = new Set([...costSummary.byItem.keys(), ...[...adSpendByItem.keys()].filter((id) => (adSpendByItem.get(id) ?? 0) > 0)]);
+    const items = [...itemIds].map((itemId) => {
+        const item = costSummary.byItem.get(itemId);
+        const adSpend = adSpendByItem.get(itemId) ?? 0;
+        const received = item?.payout ?? 0;
+        return {
+            itemId,
+            name: item?.name ?? `สินค้า #${itemId} (ไม่มียอดขาย)`,
+            quantity: item?.quantity ?? 0,
+            pendingQuantity: item?.pendingQuantity ?? 0,
+            sales: item?.sales ?? 0,
+            payout: received,
+            cogs: item?.cogs ?? 0,
+            hasCost: item ? item.hasCost : true,
+            adSpend,
+            profit: received - (item?.cogs ?? 0) - adSpend,
+        };
+    });
+    items.sort((a, b) => b.sales - a.sales || b.adSpend - a.adSpend);
+
+    const total = items.reduce(
+        (sum, item) => ({
+            quantity: sum.quantity + item.quantity,
+            pendingQuantity: sum.pendingQuantity + item.pendingQuantity,
+            sales: sum.sales + item.sales,
+            payout: sum.payout + item.payout,
+            cogs: sum.cogs + item.cogs,
+        }),
+        { quantity: 0, pendingQuantity: 0, sales: 0, payout: 0, cogs: 0 },
+    );
+    const totalProfit = total.payout - total.cogs - ads.totalSpend;
+    // Without payout for every order, "received" and profit would be understated -- show "-" instead of a wrong number.
+    const money = (value: number) => (payoutComplete ? baht(value) : "-");
+    const profitText = (value: number) => (payoutComplete ? signedBaht(value) : "-");
+
+    const table = {
+        columns: [
+            { key: "name", label: "สินค้า" },
+            { key: "quantity", label: "ขายสำเร็จ (ชิ้น)", align: "right" as const },
+            { key: "pendingQuantity", label: "รอสำเร็จ (ชิ้น)", align: "right" as const },
+            { key: "sales", label: "ยอดขาย", align: "right" as const },
+            { key: "payout", label: "เงินที่ได้รับจริง", align: "right" as const },
+            { key: "cogs", label: "ต้นทุนสินค้า", align: "right" as const },
+            { key: "adSpend", label: "ค่าโฆษณา", align: "right" as const },
+            { key: "profit", label: "กำไร/ขาดทุน", align: "right" as const },
+            { key: "margin", label: "% กำไรต่อยอดขาย", align: "right" as const },
+        ],
+        rows: [
+            ...items.map((item) => ({
+                id: `item-${item.itemId}`,
+                name: item.name,
+                quantity: item.quantity.toLocaleString(),
+                pendingQuantity: item.pendingQuantity ? item.pendingQuantity.toLocaleString() : "-",
+                sales: baht(item.sales),
+                payout: money(item.payout),
+                cogs: item.hasCost ? baht(item.cogs) : "ยังไม่ใส่ต้นทุน",
+                adSpend: item.adSpend ? baht(item.adSpend) : "-",
+                profit: profitText(item.profit),
+                margin: payoutComplete ? percent(item.profit, item.sales) : "-",
+            })),
+            ...(unassignedSpend > 0
+                ? [
+                      {
+                          id: "unassigned-ads",
+                          name: "โฆษณาที่ไม่ผูกกับสินค้า (เช่น โฆษณาร้านค้า)",
+                          quantity: "-",
+                          pendingQuantity: "-",
+                          sales: "-",
+                          payout: "-",
+                          cogs: "-",
+                          adSpend: baht(unassignedSpend),
+                          profit: signedBaht(-unassignedSpend),
+                          margin: "-",
+                      },
+                  ]
+                : []),
+            {
+                id: "total",
+                name: "รวมทั้งหมด",
+                quantity: total.quantity.toLocaleString(),
+                pendingQuantity: total.pendingQuantity ? total.pendingQuantity.toLocaleString() : "-",
+                sales: baht(total.sales),
+                payout: money(total.payout),
+                cogs: baht(total.cogs),
+                adSpend: baht(ads.totalSpend),
+                profit: profitText(totalProfit),
+                margin: payoutComplete ? percent(totalProfit, total.sales) : "-",
+            },
+        ],
+    };
+
+    const missingNote = costSummary.missingItems > 0 ? ` · ยังไม่ใส่ต้นทุน ${costSummary.missingItems} สินค้า (นับเป็น 0)` : "";
+    const metrics = [
+        {
+            id: "sales_total",
+            label: "ยอดขาย (ออเดอร์สำเร็จ)",
+            value: baht(total.sales),
+            subtitle: `${total.quantity.toLocaleString()} ชิ้น ${rangeLabel}` + (total.pendingQuantity ? ` · รอสำเร็จอีก ${total.pendingQuantity.toLocaleString()} ชิ้น (ยังไม่นับ)` : ""),
+            color: "text-sky-600",
+        },
+        {
+            id: "sales_payout",
+            label: "เงินที่ได้รับจริง",
+            value: money(total.payout),
+            subtitle: payoutComplete ? `หักค่าธรรมเนียม Shopee แล้ว ฿${Math.round(total.sales - total.payout).toLocaleString()}` : "ยังได้ข้อมูลเงินที่ได้รับไม่ครบทุกออเดอร์",
+            color: "text-teal-600",
+        },
+        { id: "sales_cogs", label: "ต้นทุนสินค้า", value: baht(total.cogs), subtitle: `ใส่ต้นทุนได้ที่แท็บสินค้า${missingNote}`, color: "text-amber-600" },
+        { id: "sales_ads", label: "ค่าโฆษณาทั้งหมด", value: baht(ads.totalSpend), subtitle: `ทุกโฆษณา ${rangeLabel}`, color: "text-blue-600" },
+        {
+            id: "sales_profit",
+            label: totalProfit >= 0 ? "กำไรสุทธิ" : "ขาดทุนสุทธิ",
+            value: profitText(totalProfit),
+            subtitle: "เงินที่ได้รับจริง − ต้นทุนสินค้า − ค่าโฆษณาทั้งหมด" + (payoutComplete ? ` · ${percent(totalProfit, total.sales)} ของยอดขาย` : ""),
+            color: !payoutComplete || totalProfit >= 0 ? "text-emerald-600" : "text-rose-600",
+        },
+    ];
+
+    return { table, metrics };
 }
 
 /** `month` ("YYYY-MM") limits every number to that month; without it, the default lookback since the ads started. */
@@ -632,7 +792,9 @@ async function fetchShopeeApiPerformance(credentials: ShopeeCredentials | null, 
             console.warn("Shopee product costs failed:", error);
             return null;
         });
-        const costSummary = completed && productCosts ? summarizeShopeeCosts(completed, payout, productCosts) : null;
+        // Without stored costs the Sales tab still lists products (cost shown as not entered); net metrics need them.
+        const costSummary = completed ? summarizeShopeeCosts(completed, payout, productCosts ?? {}) : null;
+        const salesReport = costSummary ? buildShopeeSalesReport(costSummary, ads, payoutComplete, rangeLabel) : null;
 
         // Only running ads count. If no status came back (setting-info call failed), use every campaign / the shop-wide total
         // rather than showing zero.
@@ -679,7 +841,7 @@ async function fetchShopeeApiPerformance(credentials: ShopeeCredentials | null, 
         ];
         // Per row, over the ad's products: payout share and cost of goods. null when payout or the products are unknown.
         const rowNet = (campaign: ShopeeAdsSummary["campaigns"][number]) => {
-            if (!costSummary || !payoutComplete || campaign.itemIds.length === 0) return null;
+            if (!costSummary || !productCosts || !payoutComplete || campaign.itemIds.length === 0) return null;
             return campaign.itemIds.reduce(
                 (total, itemId) => {
                     const item = costSummary.byItem.get(itemId);
@@ -751,7 +913,7 @@ async function fetchShopeeApiPerformance(credentials: ShopeeCredentials | null, 
 
         // Net = after Shopee fees (payout) and cost of goods. Needs payout for every completed order.
         function netMetrics() {
-            if (!costSummary || !payoutComplete) {
+            if (!costSummary || !productCosts || !payoutComplete) {
                 const why = !completed ? "ต้องมีข้อมูลออเดอร์สำเร็จก่อน" : !productCosts ? "ดึงต้นทุนสินค้าไม่สำเร็จ" : "ต้องมีข้อมูลเงินที่ได้รับครบทุกออเดอร์";
                 return [{ id: "net_roas", label: "Net ROAS", value: "-", subtitle: why, color: "text-fuchsia-600" }];
             }
@@ -814,6 +976,8 @@ async function fetchShopeeApiPerformance(credentials: ShopeeCredentials | null, 
                         campaignStatus: campaign.status ? (CAMPAIGN_STATUS_LABEL_TH[campaign.status] ?? campaign.status) : "-",
                     })),
             },
+            salesTable: salesReport?.table,
+            salesMetrics: salesReport?.metrics,
             // Payment tab: what Shopee paid out per completed order, newest first.
             paymentsTable: completed
                 ? {
