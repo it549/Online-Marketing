@@ -21,6 +21,10 @@ export interface ApiPerformanceResponse {
     allAdsTable?: DashboardTable;
     /** Per completed order: sales, Shopee fees and payout (Payment API escrow). Shopee only. */
     paymentsTable?: DashboardTable;
+    /** Profit/loss per product sold in the range (completed orders), plus an unassigned-ads row and a total row. Shopee only. */
+    salesTable?: DashboardTable;
+    /** Totals for the sales tab: sales, payout, cost of goods, all ad spend, net profit. Shopee only. */
+    salesMetrics?: DashboardMetric[];
     /** Every order in the range, any status, one row per product option; each row has `outcome: "completed" | "failed"` and `orderKey` (order SN). Shopee only. */
     ordersTable?: DashboardTable;
     /** Raw totals for cross-platform aggregation (Overview page). Only present when connected. */
