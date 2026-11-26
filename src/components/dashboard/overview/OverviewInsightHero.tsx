@@ -23,7 +23,7 @@ export default function OverviewInsightHero({ hasSyncedBefore, pointCount, summa
             <div className="rounded-3xl border border-slate-200 bg-gradient-to-br from-slate-50 to-white p-7">
                 <div className="mb-2 text-xs font-medium text-slate-500">สรุปภาพรวมธุรกิจ</div>
                 <h1 className="mb-2 text-2xl font-bold text-slate-900">ยังไม่มีข้อมูลให้สรุป</h1>
-                <p className="text-sm text-slate-500">เชื่อมต่อแพลตฟอร์มและรอระบบซิงค์ข้อมูล หรือกด &quot;ซิงค์ตอนนี้&quot; ในหน้าอินไซต์ แล้วกลับมาดูใหม่</p>
+                <p className="text-sm text-slate-500">เชื่อมต่อแพลตฟอร์มและรอระบบซิงค์ข้อมูล หรือกด &quot;ซิงค์ตอนนี้&quot; ในแท็บ Audience ของแต่ละแพลตฟอร์ม แล้วกลับมาดูใหม่</p>
             </div>
         );
     }
