@@ -65,7 +65,9 @@ export default function OverviewPage() {
     const [range, setRange] = useState(getDefaultDateRange);
     const { data, loading, error, refetch } = useOverview();
     const { data: insight, loading: insightLoading, refetch: refetchInsight } = useOverviewInsight(range.dateFrom, range.dateTo);
-    const [showDetail, setShowDetail] = useState(false);
+    const [detailChoice, setDetailChoice] = useState<boolean | null>(null);
+    // With no synced data the sections above are empty, so the live figures open by default until the user toggles them.
+    const showDetail = detailChoice ?? (insight ? !insight.hasDataInRange : !insightLoading);
 
     const trendSummary = insight?.hasDataInRange ? summarizeTrend(insight.points) : null;
     const signals = computeOverviewSignals(data?.topCampaigns ?? [], data?.platforms ?? [], insight?.leadsSummary ?? null, trendSummary?.totalSpend ?? 0);
@@ -115,7 +117,7 @@ export default function OverviewPage() {
 
                     <div>
                         <button
-                            onClick={() => setShowDetail((v) => !v)}
+                            onClick={() => setDetailChoice(!showDetail)}
                             className="mb-3 flex items-center gap-1.5 text-sm font-medium text-slate-600 hover:text-indigo-600"
                         >
                             {showDetail ? <ChevronUp size={15} /> : <ChevronDown size={15} />}

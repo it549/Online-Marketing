@@ -38,3 +38,4 @@
 2026-11-17 | config.ts, shopeeSign.ts, shopeeAuth.service.ts, shopeeApiPerformance.service.ts, shopeeEtl.service.ts, company.repository.ts, schema.prisma (+migration), shopee connect/callback routes, IntegrationsPage.tsx | /ads returned error_api_permission because the app is ERP System (no Ads API) | optional 2nd app SHOPEE_ADS_PARTNER_ID/KEY (Ads Service): /api/v2/ads signed with it + its own token (companies.shopee_ads_*), authorized via connect?app=ads (callback ?app=ads); ads-app token/IP errors pause only /ads; without the env vars behaviour is unchanged
 2026-11-18 | next.config.ts | prod spawned unused workerd, high RAM | cloudflare dev init only in development
 2026-11-18 | next.config.ts, run-production.bat | bat rebuilt every run, 15 build workers | skip unchanged build, cpus 2
+2026-11-26 | OverviewPage.tsx, OverviewInsightHero.tsx | no synced data hid live figures, dead insights-page hint | detail open by default; hint says Audience tab
