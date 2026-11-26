@@ -579,9 +579,10 @@ function summarizeShopeeCosts(completed: ShopeeCompletedSales, payout: ShopeePay
 }
 
 /**
- * Sales tab: profit/loss per product sold in the range (completed orders). Ad spend per product = spend of each ad
- * that promotes it, split evenly over that ad's products; spend not tied to a product (unknown products, shop-level ads)
- * gets its own row, so the total row matches the shop's whole ad spend.
+ * Sales tab: profit/loss per product sold in the range (orders placed in it; profit from completed ones). Ad spend per
+ * product = spend of each ad that promotes it, split evenly over that ad's products. Ad spend on products with no sales
+ * in the range, and spend not tied to a product (unknown products, shop-level ads), get summary rows instead, so the
+ * total row matches the shop's whole ad spend.
  */
 function buildShopeeSalesReport(costSummary: ShopeeCostSummary, ads: ShopeeAdsSummary, payoutComplete: boolean, rangeLabel: string) {
     const adSpendByItem = new Map<number, number>();
@@ -597,25 +598,14 @@ function buildShopeeSalesReport(costSummary: ShopeeCostSummary, ads: ShopeeAdsSu
     const signedBaht = (value: number) => `${value >= 0 ? "+" : "-"}${baht(Math.abs(value))}`;
     const percent = (profit: number, sales: number) => (sales > 0 ? `${((profit / sales) * 100).toFixed(1)}%` : "-");
 
-    const itemIds = new Set([...costSummary.byItem.keys(), ...[...adSpendByItem.keys()].filter((id) => (adSpendByItem.get(id) ?? 0) > 0)]);
-    const items = [...itemIds].map((itemId) => {
-        const item = costSummary.byItem.get(itemId);
+    // Only products sold in the range (completed or on their way to completion) get a row.
+    const items = [...costSummary.byItem.entries()].map(([itemId, item]) => {
         const adSpend = adSpendByItem.get(itemId) ?? 0;
-        const received = item?.payout ?? 0;
-        return {
-            itemId,
-            name: item?.name ?? `สินค้า #${itemId} (ไม่มียอดขาย)`,
-            quantity: item?.quantity ?? 0,
-            pendingQuantity: item?.pendingQuantity ?? 0,
-            sales: item?.sales ?? 0,
-            payout: received,
-            cogs: item?.cogs ?? 0,
-            hasCost: item ? item.hasCost : true,
-            adSpend,
-            profit: received - (item?.cogs ?? 0) - adSpend,
-        };
+        return { itemId, ...item, adSpend, profit: item.payout - item.cogs - adSpend };
     });
     items.sort((a, b) => b.sales - a.sales || b.adSpend - a.adSpend);
+    // Ads for products that sold nothing in the range: one summary row, so the total still covers every baht of ad spend.
+    const unsoldSpend = [...adSpendByItem.entries()].reduce((sum, [itemId, spend]) => (costSummary.byItem.has(itemId) ? sum : sum + spend), 0);
 
     const total = items.reduce(
         (sum, item) => ({
@@ -657,6 +647,22 @@ function buildShopeeSalesReport(costSummary: ShopeeCostSummary, ads: ShopeeAdsSu
                 profit: profitText(item.profit),
                 margin: payoutComplete ? percent(item.profit, item.sales) : "-",
             })),
+            ...(unsoldSpend > 0
+                ? [
+                      {
+                          id: "unsold-ads",
+                          name: "ค่าโฆษณาของสินค้าที่ไม่มียอดขายในช่วงนี้",
+                          quantity: "-",
+                          pendingQuantity: "-",
+                          sales: "-",
+                          payout: "-",
+                          cogs: "-",
+                          adSpend: baht(unsoldSpend),
+                          profit: signedBaht(-unsoldSpend),
+                          margin: "-",
+                      },
+                  ]
+                : []),
             ...(unassignedSpend > 0
                 ? [
                       {
