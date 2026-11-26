@@ -7,6 +7,11 @@ import { ApiPerformanceResponse } from "@/types/apiPerformance";
 // does not call Shopee again; only refetch() (sync button / disconnect) or a page reload asks for fresh data.
 const sharedRequests = new Map<string, Promise<ApiPerformanceResponse>>();
 
+/** Forget loaded months so the next mount fetches again (e.g. after product costs change). */
+export function clearShopeeApiPerformanceCache() {
+    sharedRequests.clear();
+}
+
 async function requestShopeeApiPerformance(month: string): Promise<ApiPerformanceResponse> {
     const query = month ? `?month=${encodeURIComponent(month)}` : "";
     const response = await fetch(`/api/dashboard/shopee/api-performance${query}`);

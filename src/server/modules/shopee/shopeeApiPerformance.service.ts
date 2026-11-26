@@ -13,7 +13,7 @@ import {
     type ShopeeCredentials,
 } from "./shopeeAuth.service";
 import { shopeeAppForPath, shopeePartner, shopeeTimestamp, signShopeeRequest } from "./shopeeSign";
-import { getCompanyById } from "@/server/modules/company/company.repository";
+import { getCompanyById, getShopeeProductCosts, type ShopeeProductCosts } from "@/server/modules/company/company.repository";
 
 export type { ShopeeCredentials } from "./shopeeAuth.service";
 
@@ -346,7 +346,7 @@ interface ShopeeOrderSummary {
     /** What the buyer paid (Shopee total_amount); null when not returned. */
     totalAmount: number | null;
     /** One line per product option (model): the same product in two options is two lines. */
-    lines: { key: string; name: string; variation: string; quantity: number; sales: number }[];
+    lines: { key: string; itemId: number | null; name: string; variation: string; quantity: number; sales: number }[];
     cancelReason: string | null;
 }
 
@@ -423,6 +423,7 @@ async function getShopeeCompletedSales(shopId: string, accessToken: string, sinc
                 totalAmount: order.total_amount ?? null,
                 lines: (order.item_list ?? []).map((item, index) => ({
                     key: `${item.item_id ?? "x"}-${item.model_id ?? index}`,
+                    itemId: item.item_id ?? null,
                     name: item.item_name ?? (item.item_id !== undefined ? `สินค้า #${item.item_id}` : "-"),
                     variation: item.model_name || "-",
                     quantity: item.model_quantity_purchased ?? 0,
@@ -520,6 +521,43 @@ const performanceCache = new Map<string, { at: number; value: ApiPerformanceResp
 // Overview, the Shopee page and Integrations can load at the same moment; share one burst of Shopee calls instead of one each (error_rate_limit).
 const performanceInFlight = new Map<string, Promise<ApiPerformanceResponse>>();
 
+/** Drop every cached month of this company (e.g. after product costs change). */
+export function clearShopeePerformanceCache(companyId: bigint) {
+    for (const key of performanceCache.keys()) if (key.startsWith(`${companyId}:`)) performanceCache.delete(key);
+}
+
+interface ShopeeCostSummary {
+    /** Cost of goods for completed orders whose product has a cost entered. */
+    cogs: number;
+    /** Distinct products sold in completed orders that have no cost entered. */
+    missingItems: number;
+    /** Per product: payout share (order payout split by line sales) and cost of goods. */
+    byItem: Map<number, { payout: number; cogs: number }>;
+}
+
+/** COGS = quantity x unit cost per completed line; payout of an order is split over its lines by sales share. */
+function summarizeShopeeCosts(completed: ShopeeCompletedSales, payout: ShopeePayout | null, costs: ShopeeProductCosts): ShopeeCostSummary {
+    let cogs = 0;
+    const missing = new Set<number>();
+    const byItem = new Map<number, { payout: number; cogs: number }>();
+    for (const order of completed.allOrders) {
+        if (order.status !== "COMPLETED") continue;
+        const orderPayout = payout?.byOrder.get(order.orderSn)?.payout;
+        for (const line of order.lines) {
+            if (line.itemId === null) continue;
+            const unitCost = costs[String(line.itemId)];
+            const lineCogs = unitCost === undefined ? 0 : unitCost * line.quantity;
+            if (unitCost === undefined) missing.add(line.itemId);
+            cogs += lineCogs;
+            const entry = byItem.get(line.itemId) ?? { payout: 0, cogs: 0 };
+            entry.cogs += lineCogs;
+            if (orderPayout !== undefined && order.sales > 0) entry.payout += (orderPayout * line.sales) / order.sales;
+            byItem.set(line.itemId, entry);
+        }
+    }
+    return { cogs, missingItems: missing.size, byItem };
+}
+
 /** `month` ("YYYY-MM") limits every number to that month; without it, the default lookback since the ads started. */
 export async function getShopeeApiPerformance(credentials: ShopeeCredentials | null, month?: string): Promise<ApiPerformanceResponse> {
     const range = parseShopeeMonth(month);
@@ -589,6 +627,13 @@ async function fetchShopeeApiPerformance(credentials: ShopeeCredentials | null, 
         }
         const payoutComplete = payout !== null && completed !== null && payout.counted === completed.orders;
 
+        // Seller-entered unit costs; a DB hiccup only hides the net numbers.
+        const productCosts = await getShopeeProductCosts(credentials.companyId).catch((error) => {
+            console.warn("Shopee product costs failed:", error);
+            return null;
+        });
+        const costSummary = completed && productCosts ? summarizeShopeeCosts(completed, payout, productCosts) : null;
+
         // Only running ads count. If no status came back (setting-info call failed), use every campaign / the shop-wide total
         // rather than showing zero.
         // A chosen month counts every ad that ran in it, even ones that have ended since.
@@ -628,10 +673,26 @@ async function fetchShopeeApiPerformance(credentials: ShopeeCredentials | null, 
             { key: "sales", label: "ยอดขายจริง (ออเดอร์สำเร็จ)", align: "right" },
             { key: "profitLoss", label: "กำไร/ขาดทุน", align: "right" },
             { key: "roas", label: "ROAS", align: "right" },
+            { key: "netRoas", label: "Net ROAS", align: "right" },
+            { key: "netProfit", label: "กำไรสุทธิ (หลังต้นทุนสินค้า)", align: "right" },
             { key: "orders", label: "ออเดอร์สำเร็จ", align: "right" },
         ];
+        // Per row, over the ad's products: payout share and cost of goods. null when payout or the products are unknown.
+        const rowNet = (campaign: ShopeeAdsSummary["campaigns"][number]) => {
+            if (!costSummary || !payoutComplete || campaign.itemIds.length === 0) return null;
+            return campaign.itemIds.reduce(
+                (total, itemId) => {
+                    const item = costSummary.byItem.get(itemId);
+                    return { payout: total.payout + (item?.payout ?? 0), cogs: total.cogs + (item?.cogs ?? 0) };
+                },
+                { payout: 0, cogs: 0 },
+            );
+        };
+        const baht = (value: number) => `฿${Math.round(value).toLocaleString()}`;
+        const signedBaht = (value: number) => `${value >= 0 ? "+" : "-"}${baht(Math.abs(value))}`;
         const campaignRow = (campaign: ShopeeAdsSummary["campaigns"][number]) => {
             const real = rowSales(campaign);
+            const net = rowNet(campaign);
             const rowProfit = real ? real.sales - campaign.spend : null;
             return {
                 id: campaign.id,
@@ -643,6 +704,8 @@ async function fetchShopeeApiPerformance(credentials: ShopeeCredentials | null, 
                 sales: real ? `฿${real.sales.toLocaleString()}` : "-",
                 profitLoss: rowProfit === null ? "-" : `${rowProfit >= 0 ? "+" : ""}฿${rowProfit.toLocaleString()}`,
                 roas: real && campaign.spend > 0 ? (real.sales / campaign.spend).toFixed(2) : "-",
+                netRoas: net && campaign.spend > 0 ? (net.payout / campaign.spend).toFixed(2) : "-",
+                netProfit: net ? signedBaht(net.payout - net.cogs - campaign.spend) : "-",
                 orders: real ? real.orders : "-",
             };
         };
@@ -683,7 +746,48 @@ async function fetchShopeeApiPerformance(credentials: ShopeeCredentials | null, 
                 color: profitLoss === null || profitLoss >= 0 ? "text-emerald-600" : "text-rose-600",
             },
             { id: "ads_roas", label: "ROAS", value: roas !== null ? roas.toFixed(2) : "-", subtitle: "ยอดขายจริง / ยอดใช้จ่ายโฆษณา", color: "text-purple-600" },
+            ...netMetrics(),
         ];
+
+        // Net = after Shopee fees (payout) and cost of goods. Needs payout for every completed order.
+        function netMetrics() {
+            if (!costSummary || !payoutComplete) {
+                const why = !completed ? "ต้องมีข้อมูลออเดอร์สำเร็จก่อน" : !productCosts ? "ดึงต้นทุนสินค้าไม่สำเร็จ" : "ต้องมีข้อมูลเงินที่ได้รับครบทุกออเดอร์";
+                return [{ id: "net_roas", label: "Net ROAS", value: "-", subtitle: why, color: "text-fuchsia-600" }];
+            }
+            const received = payout!.payout;
+            const netProfit = received - costSummary.cogs - spend;
+            const margin = received - costSummary.cogs;
+            const breakEven = margin > 0 ? received / margin : null;
+            const netRoas = spend > 0 ? received / spend : null;
+            const missingNote = costSummary.missingItems > 0 ? ` · ยังไม่ใส่ต้นทุน ${costSummary.missingItems} สินค้า (นับเป็น 0)` : "";
+            return [
+                {
+                    id: "cogs",
+                    label: "ต้นทุนสินค้า",
+                    value: baht(costSummary.cogs),
+                    subtitle: `จำนวนที่ขายได้ × ต้นทุนต่อชิ้น (ใส่ได้ที่แท็บสินค้า)${missingNote}`,
+                    color: "text-amber-600",
+                },
+                {
+                    id: "net_profit",
+                    label: netProfit >= 0 ? "กำไรสุทธิ" : "ขาดทุนสุทธิ",
+                    value: signedBaht(netProfit),
+                    subtitle: "เงินที่ได้รับจริง − ต้นทุนสินค้า − ยอดใช้จ่ายโฆษณา",
+                    color: netProfit >= 0 ? "text-emerald-600" : "text-rose-600",
+                },
+                {
+                    id: "net_roas",
+                    label: "Net ROAS",
+                    value: netRoas !== null ? netRoas.toFixed(2) : "-",
+                    subtitle:
+                        "เงินที่ได้รับจริง / ยอดใช้จ่ายโฆษณา · " +
+                        (breakEven !== null ? `จุดคุ้มทุน ${breakEven.toFixed(2)} (ต่ำกว่านี้ = ขาดทุน)` : "ต้นทุนสินค้าสูงกว่าเงินที่ได้รับ ขาดทุนแม้ไม่ยิงโฆษณา") +
+                        missingNote,
+                    color: netRoas !== null && breakEven !== null && netRoas >= breakEven ? "text-emerald-600" : "text-rose-600",
+                },
+            ];
+        }
 
         return {
             connected: true,
@@ -759,7 +863,7 @@ async function fetchShopeeApiPerformance(credentials: ShopeeCredentials | null, 
                       rows: [...completed.allOrders]
                           .sort((a, b) => (b.createTime ?? 0) - (a.createTime ?? 0))
                           .flatMap((order) => {
-                              const lines = order.lines.length > 0 ? order.lines : [{ key: "none", name: "-", variation: "-", quantity: 0, sales: 0 }];
+                              const lines = order.lines.length > 0 ? order.lines : [{ key: "none", itemId: null, name: "-", variation: "-", quantity: 0, sales: 0 }];
                               return lines.map((line, index) => ({
                                   id: `${order.orderSn}:${line.key}:${index}`,
                                   orderKey: order.orderSn,

@@ -36,6 +36,8 @@ model Company {
   shopeeAdsAccessToken    String?          @map("shopee_ads_access_token") @db.Text
   shopeeAdsRefreshToken   String?          @map("shopee_ads_refresh_token") @db.Text
   shopeeAdsTokenExpiresAt DateTime?        @map("shopee_ads_token_expires_at")
+  /// Unit cost (THB) per Shopee item_id, e.g. {"123456": 85}. Used for COGS / net profit / Net ROAS.
+  shopeeProductCosts    Json?              @map("shopee_product_costs")
   createdAt             DateTime           @default(now()) @map("created_at")
   updatedAt             DateTime           @updatedAt @map("updated_at")
   campaigns           Campaign[]

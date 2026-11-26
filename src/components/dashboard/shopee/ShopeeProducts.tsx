@@ -1,10 +1,11 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { RefreshCw, Search } from "lucide-react";
+import { RefreshCw, Save, Search } from "lucide-react";
 import DashboardLoading from "../DashboardLoading";
 import DashboardError from "../DashboardError";
 import { ShopeeProductsResponse } from "@/types/shopeeProducts";
+import { clearShopeeApiPerformanceCache } from "@/hooks/useShopeeApiPerformance";
 
 const STATUS_LABEL: Record<string, { label: string; className: string }> = {
     NORMAL: { label: "ขายอยู่", className: "bg-emerald-50 text-emerald-700" },
@@ -21,6 +22,52 @@ export default function ShopeeProducts() {
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
     const [query, setQuery] = useState("");
+    // Unit cost per product (item id -> text as typed); saved costs are what the server last returned.
+    const [costs, setCosts] = useState<Record<string, string>>({});
+    const [savedCosts, setSavedCosts] = useState<Record<string, string>>({});
+    const [saving, setSaving] = useState(false);
+    const [saveMessage, setSaveMessage] = useState<string | null>(null);
+    const costsDirty = JSON.stringify(costs) !== JSON.stringify(savedCosts);
+
+    const applyCosts = (map: Record<string, number>) => {
+        const asText = Object.fromEntries(Object.entries(map).map(([id, value]) => [id, String(value)]));
+        setCosts(asText);
+        setSavedCosts(asText);
+    };
+
+    useEffect(() => {
+        fetch("/api/dashboard/shopee/product-costs")
+            .then((response) => (response.ok ? response.json() : null))
+            .then((result) => result?.costs && applyCosts(result.costs))
+            .catch(() => undefined);
+    }, []);
+
+    const saveCosts = async () => {
+        setSaving(true);
+        setSaveMessage(null);
+        try {
+            const payload = Object.fromEntries(
+                Object.entries(costs)
+                    .filter(([, text]) => text.trim() !== "" && Number.isFinite(Number(text)) && Number(text) >= 0)
+                    .map(([id, text]) => [id, Number(text)]),
+            );
+            const response = await fetch("/api/dashboard/shopee/product-costs", {
+                method: "PUT",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ costs: payload }),
+            });
+            const result = await response.json();
+            if (!response.ok) throw new Error(result.error ?? "บันทึกไม่สำเร็จ");
+            applyCosts(result.costs);
+            // Overview/Ads tabs recompute Net ROAS from these costs on their next load.
+            clearShopeeApiPerformanceCache();
+            setSaveMessage("บันทึกต้นทุนแล้ว");
+        } catch (err) {
+            setSaveMessage(err instanceof Error ? err.message : "บันทึกไม่สำเร็จ");
+        } finally {
+            setSaving(false);
+        }
+    };
 
     const load = useCallback(async (force: boolean) => {
         try {
@@ -66,7 +113,18 @@ export default function ShopeeProducts() {
                     )}
                 </div>
 
-                <div className="flex items-center gap-2">
+                <div className="flex flex-wrap items-center gap-2">
+                    {saveMessage && <span className="text-sm text-slate-500">{saveMessage}</span>}
+                    {data?.connected && (
+                        <button
+                            onClick={saveCosts}
+                            disabled={saving || !costsDirty}
+                            className="flex items-center gap-2 rounded-xl bg-indigo-600 px-4 py-2 text-sm font-medium text-white shadow-sm transition-colors hover:bg-indigo-700 disabled:opacity-50"
+                        >
+                            <Save className="h-4 w-4" strokeWidth={2} />
+                            {saving ? "กำลังบันทึก…" : "บันทึกต้นทุน"}
+                        </button>
+                    )}
                     <div className="relative">
                         <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
                         <input
@@ -101,6 +159,7 @@ export default function ShopeeProducts() {
                                 <th className="px-5 py-3 text-left">สินค้า</th>
                                 <th className="px-5 py-3 text-center">สถานะ</th>
                                 <th className="px-5 py-3 text-right">ราคา</th>
+                                <th className="px-5 py-3 text-right" title="ต้นทุนต่อชิ้น ใช้คำนวณกำไรสุทธิและ Net ROAS">ต้นทุน/ชิ้น (฿)</th>
                                 <th className="px-5 py-3 text-right">สต็อก</th>
                                 <th className="px-5 py-3 text-right">ขายแล้ว</th>
                                 <th className="px-5 py-3 text-right">ยอดเข้าชม</th>
@@ -145,6 +204,19 @@ export default function ShopeeProducts() {
                                                 "-"
                                             )}
                                         </td>
+                                        <td className="px-5 py-3 text-right">
+                                            <input
+                                                type="number"
+                                                min={0}
+                                                step="0.01"
+                                                inputMode="decimal"
+                                                value={costs[product.id] ?? ""}
+                                                onChange={(e) => setCosts((prev) => ({ ...prev, [product.id]: e.target.value }))}
+                                                placeholder="-"
+                                                aria-label={`ต้นทุนต่อชิ้นของ ${product.name}`}
+                                                className="w-24 rounded-lg border border-slate-200 px-2 py-1 text-right text-sm focus:border-indigo-400 focus:outline-none"
+                                            />
+                                        </td>
                                         <td className={`px-5 py-3 text-right ${product.stock === 0 ? "font-semibold text-rose-600" : "text-slate-700"}`}>
                                             {formatNumber(product.stock)}
                                         </td>
@@ -157,7 +229,7 @@ export default function ShopeeProducts() {
                             })}
                             {products.length === 0 && (
                                 <tr>
-                                    <td colSpan={8} className="px-5 py-10 text-center text-slate-400">
+                                    <td colSpan={9} className="px-5 py-10 text-center text-slate-400">
                                         {query ? "ไม่พบสินค้าที่ค้นหา" : "ยังไม่มีสินค้าในร้าน"}
                                     </td>
                                 </tr>
