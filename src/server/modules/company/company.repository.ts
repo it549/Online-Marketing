@@ -81,6 +81,20 @@ export async function clearShopeeAdsCredentials(companyId: bigint) {
     });
 }
 
+/** Unit cost (THB) per Shopee item_id, as entered by the seller. */
+export type ShopeeProductCosts = Record<string, number>;
+
+export async function getShopeeProductCosts(companyId: bigint): Promise<ShopeeProductCosts> {
+    const company = await prisma.company.findUnique({ where: { id: companyId }, select: { shopeeProductCosts: true } });
+    const raw = company?.shopeeProductCosts;
+    if (!raw || typeof raw !== "object" || Array.isArray(raw)) return {};
+    return Object.fromEntries(Object.entries(raw).filter((entry): entry is [string, number] => typeof entry[1] === "number"));
+}
+
+export async function saveShopeeProductCosts(companyId: bigint, costs: ShopeeProductCosts): Promise<void> {
+    await prisma.company.update({ where: { id: companyId }, data: { shopeeProductCosts: costs } });
+}
+
 export async function updateGoogleAdsConnection(
     companyId: bigint,
     data: { customerId: string; refreshToken: string }
